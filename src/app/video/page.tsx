@@ -6,6 +6,7 @@ import { VideoResultModal } from '@/components/video/VideoResultModal';
 import { useProjectStore } from '@/store/useProjectStore';
 import { VideoSettings, VideoSettingsState } from '@/components/video/VideoSettings';
 import toast, { Toaster } from 'react-hot-toast';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 export default function VideoPage() {
     const [prompt, setPrompt] = useState('');
@@ -22,6 +23,7 @@ export default function VideoPage() {
     });
 
     const { currentProject, updateScene, saveCurrentProject, updateProjectInfo } = useProjectStore();
+    const { kieKey, openaiKey } = useSettingsStore();
     const scenes = currentProject?.scenes || [];
 
     // Auto-select first available image if none selected
@@ -74,10 +76,19 @@ export default function VideoPage() {
             return;
         }
 
+        if (!kieKey || !openaiKey) {
+            toast.error('설정에서 KIE 및 OpenAI API 키를 먼저 입력해주세요.');
+            return;
+        }
+
         try {
             const response = await fetch('/api/video/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-kie-key': kieKey,
+                    'x-openai-key': openaiKey
+                },
                 body: JSON.stringify({
                     imageUrl: selectedImage,
                     prompt: prompt,
@@ -133,8 +144,8 @@ export default function VideoPage() {
                                         setSelectedSceneId(scene.id);
                                     }}
                                     className={`aspect-video rounded-md overflow-hidden cursor-pointer border-2 transition-all relative group ${selectedImage === scene.imageUrl
-                                            ? 'border-[var(--primary-color)] ring-2 ring-[var(--primary-color)]/30'
-                                            : 'border-transparent hover:border-[var(--text-gray)]'
+                                        ? 'border-[var(--primary-color)] ring-2 ring-[var(--primary-color)]/30'
+                                        : 'border-transparent hover:border-[var(--text-gray)]'
                                         }`}
                                 >
                                     <img src={scene.imageUrl} alt={`Scene ${scene.id}`} className="w-full h-full object-cover" />

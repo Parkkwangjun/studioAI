@@ -1,0 +1,485 @@
+https://docs.cloud.google.com/text-to-speech/docs/chirp3-hd?hl=ko#voice_options
+https://docs.cloud.google.com/text-to-speech/docs/libraries?hl=ko#client-libraries-install-python
+https://docs.cloud.google.com/text-to-speech/docs/reference/rest
+
+
+Chirp 3: HD 음성
+
+bookmark_border
+ Colab 노트북 사용해 보기	 GitHub에서 노트북 보기
+Text-to-Speech Chirp 3: HD 음성은 최신 세대의 Text-to-Speech 기술을 나타냅니다. 최신 세대의 Google 생성 모델을 기반으로 하는 이러한 음성은 사실감과 함께 정서적 공명을 전달합니다.
+
+Google Cloud 콘솔에서 Google 음성 모델을 살펴보고 실험하려면 Media Studio를 확인하세요.
+
+Vertex AI Studio에서 Chirp 3: HD 음성 사용해 보기
+
+음성 옵션
+고유한 특성을 지닌 다양한 음성 옵션을 사용할 수 있습니다.
+
+이름	성별	데모
+Achernar	여성	
+Achird	남성	
+Algenib	남성	
+Algieba	남성	
+Alnilam	남성	
+Aoede	여성	
+Autonoe	여성	
+Callirrhoe	여성	
+카론	남성	
+Despina	여성	
+엔켈라두스	남성	
+Erinome	여성	
+Fenrir	남성	
+Gacrux	여성	
+이아페투스	남성	
+Kore	여성	
+Laomedeia	여성	
+Leda	여성	
+Orus	남성	
+Pulcherrima	여성	
+Puck	남성	
+Rasalgethi	남성	
+Sadachbia	남성	
+Sadaltager	남성	
+Schedar	남성	
+Sulafat	여성	
+Umbriel	남성	
+Vindemiatrix	여성	
+Zephyr	여성	
+Zubenelgenubi	남성	
+지원 언어
+Chirp 3: HD 음성은 다음 언어로 지원됩니다.
+
+언어	BCP-47 코드
+아랍어(일반)	ar-XA
+벵골어(인도)	bn-IN
+덴마크어(덴마크)	da-DK
+네덜란드어(벨기에)	nl-BE
+네덜란드어(네덜란드)	nl-NL
+영어(호주)	en-AU
+영어(인도)	en-IN
+영어(영국)	en-GB
+영어(미국)	en-US
+핀란드어(핀란드)	fi-FI
+프랑스어(캐나다)	fr-CA
+프랑스어(프랑스)	fr-FR
+독일어(독일)	de-DE
+구자라트어(인도)	gu-IN
+힌디어(인도)	hi-IN
+인도네시아어(인도네시아)	id-ID
+이탈리아어(이탈리아)	it-IT
+일본어(일본)	ja-JP
+칸나다어(인도)	kn-IN
+한국어(대한민국)	ko-KR
+말라얄람어(인도)	ml-IN
+북경어(중국)	cmn-CN
+마라티어(인도)	mr-IN
+노르웨이어 보크몰(노르웨이)	nb-NO
+폴란드어(폴란드)	pl-PL
+포르투갈어(브라질)	pt-BR
+러시아어(러시아)	ru-RU
+스페인어(스페인)	es-ES
+스페인어(미국)	es-US
+스와힐리어(케냐)	sw-KE
+스웨덴어(스웨덴)	sv-SE
+타밀어(인도)	ta-IN
+텔루구어(인도)	te-IN
+태국어(태국)	th-TH
+터키어(터키)	tr-TR
+우크라이나어(우크라이나)	uk-UA
+우르두어(인도)	ur-IN
+베트남어(베트남)	vi-VN
+사용 가능한 리전
+Chirp 3: HD 음성은 다음 Google Cloud 리전에서 각각 사용할 수 있습니다.
+
+Google Cloud 영역	출시 준비
+global	GA
+us	GA
+eu	GA
+asia-southeast1	GA
+europe-west2	GA
+asia-northeast1	GA
+지원되는 출력 형식
+기본 응답 형식은 LINEAR16이지만 지원되는 다른 형식은 다음과 같습니다.
+
+API 메서드	형식
+streaming	ALAW, MULAW, OGG_OPUS, PCM
+batch	ALAW, MULAW, MP3, OGG_OPUS, PCM
+Chirp 3 사용: HD 음성
+Chirp 3: HD 음성을 사용하여 음성을 합성하는 방법 알아보기
+
+스트리밍 음성 합성 요청 수행
+Python
+Text-to-Speech용 클라이언트 라이브러리를 설치하고 사용하는 방법은 Text-to-Speech 클라이언트 라이브러리를 참조하세요. 자세한 내용은 Text-to-Speech Python API 참고 문서를 확인하세요.
+
+Text-to-Speech에 인증하려면 애플리케이션 기본 사용자 인증 정보를 설정합니다. 자세한 내용은 로컬 개발 환경의 인증 설정을 참조하세요.
+
+
+
+
+"""Synthesizes speech from a stream of input text."""
+from google.cloud import texttospeech
+
+client = texttospeech.TextToSpeechClient()
+
+# See https://cloud.google.com/text-to-speech/docs/voices for all voices.
+streaming_config = texttospeech.StreamingSynthesizeConfig(
+    voice=texttospeech.VoiceSelectionParams(
+        name="en-US-Chirp3-HD-Charon",
+        language_code="en-US",
+    )
+)
+
+# Set the config for your stream. The first request must contain your config, and then each subsequent request must contain text.
+config_request = texttospeech.StreamingSynthesizeRequest(
+    streaming_config=streaming_config
+)
+
+text_iterator = [
+    "Hello there. ",
+    "How are you ",
+    "today? It's ",
+    "such nice weather outside.",
+]
+
+# Request generator. Consider using Gemini or another LLM with output streaming as a generator.
+def request_generator():
+    yield config_request
+    for text in text_iterator:
+        yield texttospeech.StreamingSynthesizeRequest(
+            input=texttospeech.StreamingSynthesisInput(text=text)
+        )
+
+streaming_responses = client.streaming_synthesize(request_generator())
+
+for response in streaming_responses:
+    print(f"Audio content size in bytes is: {len(response.audio_content)}")
+온라인 음성 합성 요청 수행
+Python
+Text-to-Speech용 클라이언트 라이브러리를 설치하고 사용하는 방법은 Text-to-Speech 클라이언트 라이브러리를 참조하세요. 자세한 내용은 Text-to-Speech Python API 참고 문서를 확인하세요.
+
+Text-to-Speech에 인증하려면 애플리케이션 기본 사용자 인증 정보를 설정합니다. 자세한 내용은 로컬 개발 환경의 인증 설정을 참조하세요.
+
+
+
+
+def synthesize_text():
+    """Synthesizes speech from the input string of text."""
+    from google.cloud import texttospeech
+
+    text = "Hello there."
+    client = texttospeech.TextToSpeechClient()
+
+    input_text = texttospeech.SynthesisInput(text=text)
+
+    # Note: the voice can also be specified by name.
+    # Names of voices can be retrieved with client.list_voices().
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-US",
+        name="en-US-Chirp3-HD-Charon",
+    )
+
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3
+    )
+
+    response = client.synthesize_speech(
+        input=input_text,
+        voice=voice,
+        audio_config=audio_config,
+    )
+
+    # The response's audio_content is binary.
+    with open("output.mp3", "wb") as out:
+        out.write(response.audio_content)
+        print('Audio content written to file "output.mp3"')
+
+스크립트 및 프롬프트 작성 도움말
+텍스트에서 몰입되고 자연스러운 오디오를 만들려면 음성 언어의 뉘앙스를 이해하고 이를 스크립트 형식으로 변환해야 합니다. 다음 팁을 활용하면 선택한 어조를 잘 살리고 진정성 있게 들리는 스크립트를 작성할 수 있습니다.
+
+목표 이해하기: 자연스러운 음성
+기본 목표는 합성된 음성을 자연스러운 인간의 음성과 최대한 비슷하게 만드는 것입니다. 여기에는 다음 항목이 포함됩니다.
+
+자연스러운 속도 모방: 말하는 속도입니다.
+원활한 흐름 만들기: 문장과 문구 간에 원활하게 전환합니다.
+사실적으로 끊어 읽을 지점 추가: 강조와 명확성을 위해 끊어 읽을 지점을 추가합니다.
+대화체 어조 포착: 오디오가 실제 대화처럼 들리도록 합니다.
+자연스러운 음성 주요 기법
+속도와 흐름을 위한 구두점
+
+마침표(.): 마침표와 더 긴 쉼표를 나타냅니다. 완전한 생각을 구분하고 명확한 문장 경계를 만들 때 사용합니다.
+쉼표(,): 문장 내에서 더 짧게 멈추는 지점을 나타냅니다. 절을 구분하거나, 항목을 나열하거나, 숨을 쉴 수 있는 짧은 휴식을 도입하는 데 사용합니다.
+생략 부호(...): 더 길고 의도적인 일시중지를 나타냅니다. 생각을 이어나가거나, 주저하거나, 극적으로 멈추는 것을 나타낼 수 있습니다.
+예: "그런데... 일이 벌어졌습니다."
+하이픈(-): 잠시 멈추거나 생각의 갑작스러운 중단을 나타내는 데 사용할 수 있습니다.
+예: "말하고 싶었지만 말할 수 없었습니다."
+일시중지 및 말더듬기 통합
+
+전략적 일시중지: 말하는 사람이 숨을 쉬거나 강조하기 위해 자연스럽게 멈추는 지점에 말줄임표, 쉼표 또는 하이픈을 사용하여 쉼표를 만듭니다.
+말더듬기(음, 어): 일부 Text-to-Speech 모델은 말더듬기를 자동으로 처리하지만 말더듬기의 역할을 이해하는 것이 중요합니다. 말더듬기는 대화에 진정성을 더하고 음성이 로봇처럼 들리지 않도록 합니다. 모델에서 추가하더라도 인간의 언어에서 자연스럽게 발생하는 부분을 알고 있으면 스크립트의 전반적인 흐름을 이해하는 데 도움이 됩니다.
+실험 및 반복
+
+재합성: 동일한 음성으로 동일한 메시지를 여러 번 재합성해도 됩니다. 구두점, 공백 또는 단어 선택을 약간만 조정해도 최종 오디오에 큰 영향을 미칠 수 있습니다.
+비판적으로 듣기: 합성된 오디오의 속도, 흐름, 전반적인 어조에 세심한 주의를 기울입니다. 부자연스러운 부분을 파악하고 스크립트를 적절하게 조정합니다.
+음성 변형: 시스템에서 허용하는 경우 다양한 음성을 사용해 보고 스크립트와 선택한 어조에 가장 적합한 음성을 확인해 보세요.
+실용적인 스크립팅 도움말
+
+소리 내어 읽기: 합성하기 전에 스크립트를 소리 내어 읽습니다. 이를 통해 어색한 문구, 부자연스러운 쉼표, 조정이 필요한 부분을 파악할 수 있습니다.
+대화체로 작성: 축약형(예: 'it's,' 'we're') 및 비격식체 언어를 사용하여 스크립트가 더 자연스럽게 들리도록 합니다.
+맥락 고려: 스크립트의 어조와 속도는 오디오의 맥락과 일치해야 합니다. 공식 프레젠테이션에는 일상적인 대화와는 다른 접근 방식이 필요합니다.
+복잡한 문장 분해: 길고 복잡한 문장은 TTS 엔진에서 처리하기 어려울 수 있습니다. 더 짧고 관리하기 쉬운 문장으로 나눕니다.
+샘플 스크립트 개선사항
+
+원본 스크립트(로봇): "이제 제품이 출시됩니다. 새로운 기능이 있습니다. 정말 흥미롭습니다."
+
+개선된 스크립트(자연스러운): "이제 제품을 사용할 수 있습니다. 또한 몇 가지 흥미로운 새로운 기능이 추가되었습니다. 음, 정말 흥미진진합니다."
+
+원본 스크립트(로봇): "이 메일은 자동으로 전송된 확인 메일입니다. 예약이 처리되었습니다. 다음 세부정보는 예정된 숙박에 관한 내용입니다. 예약 번호는 12345입니다. 등록된 투숙객 이름은 Anthony Vasquez이고 도착 날짜는 3월 14일입니다. 출발 날짜는 3월 16일입니다. 객실 유형은 디럭스 스위트입니다. 투숙객 수는 1명입니다. 체크인 시간은 오후 3시입니다. 체크아웃 시간은 오전 11시입니다. 취소 정책에 따라 도착 48시간 전에 알려야 합니다. 이 기간 내에 알리지 않으면 1박 요금이 청구됩니다. 예약에 포함된 추가 편의시설로는 무료 Wi-Fi, 피트니스 센터 이용, 무료 조식이 있습니다. 문의사항이 있으면 855-555-6689로 호텔에 직접 문의해 주세요. 저희 호텔을 선택해 주셔서 감사합니다."
+
+개선된 스크립트(자연스러운): "앤서니 바스케즈님, 안녕하세요. 예약을 확인해 주셔서 감사합니다. 3월 14일부터 3월 16일까지 아름다운 디럭스 스위트에서 투숙하실 수 있도록 준비했습니다. 투숙객 1명 기준입니다. 필요한 경우를 대비해 확인 번호는 12345입니다.
+
+체크인 시간은 오후 3시이고 체크아웃 시간은 오전 11시입니다.
+
+취소 정책에 관해 알려드리자면… 취소해야 하는 경우 도착 48시간 전에 알려주시면 됩니다. 아시겠죠? 그렇지 않으면 1박에 해당하는 비용이 청구됩니다.
+
+또한 투숙객의 편의를 위해 무료 Wi-Fi와 피트니스 센터를 이용하실 수 있고 매일 아침 맛있는 무료 조식이 제공됩니다.
+
+궁금한 점이 있으면 언제든지 855-555-6689로 문의해 주세요. 호텔에서 뵙기를 기다리겠습니다."
+
+변경사항 설명:
+
+생략 부호(...)는 강조를 위해 일시중지를 만듭니다.
+'and we've'는 보다 대화적인 어조를 위해 축약형을 사용합니다.
+'음, 정말 기대됩니다'라고 말하면 약간의 말더듬과 강조 효과를 더할 수 있습니다.
+'아시겠죠?'의 친근한 알림은 어조를 부드럽게 합니다.
+이 가이드라인에 따라 자연스럽고 몰입되는 인간적인 음성 스크립트를 만들 수 있습니다. 연습과 실험이 이 기술을 습득하는 데 중요한 역할을 한다는 점을 기억하세요.
+
+Chirp 3: HD SSML 지원
+프리뷰
+
+이 제품 또는 기능에는 서비스별 약관의 일반 서비스 약관 섹션에 있는 'GA 이전 제공 서비스 약관'이 적용됩니다. GA 이전 제품 및 기능은 '있는 그대로' 제공되며 지원이 제한될 수 있습니다. 자세한 내용은 출시 단계 설명을 참조하세요.
+
+음성 합성 마크업 언어(SSML) 태그를 사용하면 텍스트가 음성으로 변환되는 방식을 더욱 효율적으로 제어할 수 있습니다. SSML을 사용하면 발음과 단락을 지정하고 입력 텍스트의 전체 구조를 제어하여 더욱 자연스러운 오디오를 만들 수 있습니다.
+
+지원되는 SSML 요소
+Chirp 3: HD 음성은 사용 가능한 SSML 태그 일부를 지원하며, 지원되는 태그는 여기에 설명되어 있습니다. 이 목록에 없는 태그는 합성 프로세스 중에 무시됩니다.
+
+<speak>: SSML 텍스트 루트 요소입니다.
+<say-as>: 포함된 텍스트를 발음하는 방법에 대한 힌트를 제공할 수 있습니다. interpret-as="expletive" 또는 interpret-as="bleep"은 지원되지 않습니다.
+<p>: 단락을 나타냅니다.
+<s>: 문장을 나타냅니다.
+<phoneme>: 포함된 텍스트의 음성 발음을 제공합니다.
+<sub>: 요소에 포함된 텍스트 대신 별칭 값을 발음합니다.
+SSML을 사용하는 SynthesizeSpeechRequest 샘플:
+
+
+
+{
+  "audio_config": {
+    "audio_encoding": "LINEAR16",
+  },
+  "input": {
+    "ssml": "<speak>Here are <say-as interpret-as=\"characters\">SSML</say-as> samples. I can also substitute phrases, like the <sub alias=\"World Wide Web Consortium\">W3C</sub>. Hi,<phoneme alphabet=\"ipa\" ph=\"ˌmænɪˈtoʊbə\">manitoba<phoneme>! Finally, I can speak a paragraph with two sentences. <p><s>This is sentence one.</s><s>This is sentence two.</s></p></speak>",
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+Chirp 3: HD 음성 제어
+프리뷰
+
+이 제품 또는 기능에는 서비스별 약관의 일반 서비스 약관 섹션에 있는 'GA 이전 제공 서비스 약관'이 적용됩니다. GA 이전 제품 및 기능은 '있는 그대로' 제공되며 지원이 제한될 수 있습니다. 자세한 내용은 출시 단계 설명을 참조하세요.
+
+음성 제어 기능은 HD 음성 합성 전용입니다. Chirp 3: HD 음성 제어 옵션을 통해 속도 제어, 숨 돌리기 제어, 커스텀 발음을 관리할 수 있습니다.
+
+속도 제어
+속도 매개변수를 사용하여 생성된 오디오의 속도를 조정할 수 있습니다. 속도 매개변수를 사용하면 0.25배(매우 느림)에서 2배(매우 빠름)에 이르는 값으로 음성 속도를 늦추거나 높일 수 있습니다. 속도를 설정하려면 요청에서 speaking_rate 매개변수를 사용하세요. 0.25 ~ 2.0 사이의 값을 선택하세요. 1.0 미만의 값은 음성 속도를 늦추고 1.0 초과의 값은 음성 속도를 높입니다. 값 1.0은 조정되지 않은 속도를 나타냅니다.
+
+속도 제어를 사용하는 SynthesizeSpeechRequest 샘플:
+
+
+
+{
+  "audio_config": {
+    "audio_encoding": "LINEAR16",
+    "speaking_rate": 2.0,
+  },
+  "input": {
+    "text": "Once upon a time, there was a cute cat. He was so cute that he got lots of treats.",
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+속도 제어를 사용하는 StreamingSynthesizeConfig 샘플:
+
+
+
+{
+  "streaming_audio_config": {
+    "audio_encoding": "LINEAR16",
+    "speaking_rate": 2.0,
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+속도 제어 오디오 샘플:
+
+말하기 속도	출력
+0.5	
+1.0	
+2.0	
+일시중지 제어
+markup 입력 필드를 사용하여 텍스트에 특수 태그를 직접 삽입하면 AI 생성 음성에 일시중지를 삽입할 수 있습니다. 일시중지 태그는 text 필드가 아닌 markup 필드에서만 작동합니다.
+
+이러한 태그는 AI에 음소거를 하도록 신호를 보내지만 이러한 일시중지의 정확한 길이는 고정되어 있지 않습니다. AI는 맥락에 따라 지속 시간을 조정합니다. 이는 자연스러운 인간의 음성이 화자, 위치, 문장 구조에 따라 달라지는 것과 비슷합니다. 사용 가능한 일시중지 태그는 [pause short], [pause long], [pause]입니다. 마크업 태그를 사용하지 않고 일시중지를 만드는 다른 방법은 프롬프트 및 작성 가이드라인을 참조하세요.
+
+AI 모델이 가끔 일시중지 태그를 무시할 수 있는데, 특히 텍스트에서 부자연스러운 위치에 배치된 경우 그렇습니다. 더 긴 음소거를 위해 여러 개의 일시중지 태그를 결합할 수 있지만 과도하게 사용하면 문제가 발생할 수 있습니다.
+
+일시중지 제어를 사용하는 SynthesizeSpeechRequest 샘플:
+
+
+
+{
+  "audio_config": {
+    "audio_encoding": "LINEAR16",
+  },
+  "input": {
+    "markup": "Let me take a look, [pause long] yes, I see it.",
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+일시중지 제어를 사용하는 StreamingSynthesisInput 샘플:
+
+
+
+{
+  "markup": "Let me take a look, [pause long] yes, I see it.",
+}
+일시중지 제어 오디오 샘플:
+
+마크업 입력	출력
+"확인해 보겠습니다. 네, 보입니다."	
+"확인해 보겠습니다. [긴 일시중지] 네, 보입니다."	
+커스텀 발음
+입력 텍스트 내 단어에 IPA 또는 X-SAMPA 음성 표현을 사용하여 커스텀 발음을 지정할 수 있습니다. 정확한 렌더링을 위해 언어에 적합한 음소를 사용해야 합니다. 음소 재정의에 대한 자세한 내용은 음소 문서를 참조하세요.
+
+커스텀 발음을 사용하는 SynthesizeSpeechRequest 샘플:
+
+
+
+{
+  "audio_config": {
+    "audio_encoding": "LINEAR16",
+  },
+  "input": {
+    "text": "There is a dog in the boat",
+    "custom_pronunciations": {
+      "phrase": "dog",
+      "phonetic_encoding": "PHONETIC_ENCODING_X_SAMPA",
+      "pronunciation": "\"k{t",
+    }
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+커스텀 발음을 사용하는 StreamingSynthesizeConfig 샘플:
+
+
+
+{
+  "streaming_audio_config": {
+    "audio_encoding": "LINEAR16",
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+  "custom_pronunciations": {
+    "phrase": "dog",
+    "phonetic_encoding": "PHONETIC_ENCODING_X_SAMPA",
+    "pronunciation": "\"k{t",
+  }
+}
+커스텀 발음 오디오 샘플:
+
+커스텀 발음 적용됨	출력
+없음	
+'dog'이 'k{t'로 발음됨	
+재정의된 문구는 기호를 사용하는 등 어떤 방식으로든 형식을 지정할 수 있습니다. 예를 들어 문구 일치에 잠재적인 맥락 기반 모호성이 있는 경우(중국어, 일본어와 같은 언어에서 흔함) 또는 한 단어가 여러 방식으로 발음될 수 있는 문장의 경우 모호성을 제거하도록 문구의 형식을 지정할 수 있습니다. 예를 들어 입력에서 read라는 단어의 다른 인스턴스를 실수로 재정의하지 않으려면 입력 텍스트와 재정의된 문구 모두에 대해 "read" 문구를 "read1", "[read]" 또는 "(read)"로 형식을 지정할 수 있습니다.
+
+read라는 단어가 두 가지 다른 방식으로 발음되는 문장에 커스텀 발음을 적용하는 예시는 다음과 같습니다.
+
+
+
+{
+  "audio_config": {
+    "audio_encoding": "LINEAR16",
+  },
+  "input": {
+    "text": "I read1 a book, and I will now read2 it to you.",
+    "custom_pronunciations": {
+      "phrase": "read1",
+      "phonetic_encoding": "PHONETIC_ENCODING_IPA",
+      "pronunciation": "rɛd",
+    }
+    "custom_pronunciations": {
+      "phrase": "read2",
+      "phonetic_encoding": "PHONETIC_ENCODING_IPA",
+      "pronunciation": "riːd",
+    }
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+커스텀 발음 적용됨	출력
+두 가지 방법으로 재정의된 'read'	
+또한 마크업 입력과 함께 커스텀 발음을 사용할 수 있으며, 이를 통해 일시중지 태그도 사용할 수 있습니다.
+
+
+
+{
+  "audio_config": {
+    "audio_encoding": "LINEAR16",
+  },
+  "input": {
+    "markup": "Did you [pause long] read this book?",
+    "custom_pronunciations": {
+      "phrase": "read",
+      "phonetic_encoding": "PHONETIC_ENCODING_IPA",
+      "pronunciation": "riːd",
+    }
+  },
+  "voice": {
+    "language_code": "en-US",
+    "name": "en-us-Chirp3-HD-Leda",
+  }
+}
+사용된 커스텀 발음	출력
+일시중지 태그로 발음 재정의	
+음성 제어 지원 언어
+속도 제어는 모든 언어에서 사용할 수 있습니다.
+
+일시중지 제어는 모든 언어에서 사용할 수 있습니다.
+
+커스텀 발음은 bn-in, gu-in, nl-be, sw-ke, th-th, uk-ua, ur-in, vi-vn을 제외한 모든 언어에서 사용할 수 있습니다.
+
+FAQ
+일반적인 질문과 답변:
+
+음성 출력을 개선하기 위해 속도와 흐름을 어떻게 제어해야 하나요?
+프롬프트 작성 가이드라인을 활용하여 텍스트 프롬프트를 개선하고 음성 출력을 개선할 수 있습니다.
+
+지원되는 언어의 음성에 액세스하려면 어떻게 해야 하나요?
+음성 이름은 특정 형식을 따르므로 음성을 고유하게 지정하여 지원되는 모든 언어에서 사용할 수 있습니다. 형식은 \<locale\>-\<model\>-\<voice\>입니다. 예를 들어 Chirp 3: HD 음성 모델을 사용하여 영어(미국)용 Kore 음성을 사용하려면 en-US-Chirp3-HD-Kore로 지정합니다.

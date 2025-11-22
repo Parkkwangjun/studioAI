@@ -4,6 +4,7 @@ import { Image as ImageIcon, Wand2, RefreshCw, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '@/store/useProjectStore';
 import toast, { Toaster } from 'react-hot-toast';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 export default function ImagePage() {
     const [fixedPrompt, setFixedPrompt] = useState('high quality, professional photography, 8k resolution, detailed, cinematic lighting, vibrant colors');
@@ -14,6 +15,7 @@ export default function ImagePage() {
     const [editablePrompts, setEditablePrompts] = useState<{ [key: number]: string }>({});
 
     const { currentProject, updateScene, saveCurrentProject, updateProjectInfo } = useProjectStore();
+    const { falKey, openaiKey } = useSettingsStore();
     const scenes = currentProject?.scenes || [];
 
     // Initialize editable prompts when scenes load
@@ -48,11 +50,20 @@ export default function ImagePage() {
             return;
         }
 
+        if (!falKey || !openaiKey) {
+            toast.error('설정에서 FAL 및 OpenAI API 키를 먼저 입력해주세요.');
+            return;
+        }
+
         setGeneratingId(sceneId);
         try {
             const response = await fetch('/api/image/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-fal-key': falKey,
+                    'x-openai-key': openaiKey
+                },
                 body: JSON.stringify({
                     prompt: finalPrompt,
                     imageSize: "landscape_16_9",
@@ -134,8 +145,8 @@ export default function ImagePage() {
                         <button
                             onClick={() => setSelectedModel('dev')}
                             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'dev'
-                                    ? 'bg-[var(--primary-color)] text-white shadow-sm'
-                                    : 'text-[var(--text-gray)] hover:text-white'
+                                ? 'bg-[var(--primary-color)] text-white shadow-sm'
+                                : 'text-[var(--text-gray)] hover:text-white'
                                 }`}
                         >
                             <Wand2 className="w-3 h-3" />
@@ -144,8 +155,8 @@ export default function ImagePage() {
                         <button
                             onClick={() => setSelectedModel('schnell')}
                             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'schnell'
-                                    ? 'bg-[var(--primary-color)] text-white shadow-sm'
-                                    : 'text-[var(--text-gray)] hover:text-white'
+                                ? 'bg-[var(--primary-color)] text-white shadow-sm'
+                                : 'text-[var(--text-gray)] hover:text-white'
                                 }`}
                         >
                             <Zap className="w-3 h-3" />

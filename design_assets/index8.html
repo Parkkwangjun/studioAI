@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Studio - Video Generation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* === 1. 변수 및 기본 설정 (이전과 동일) === */
+        :root {
+            --bg-dark: #181820;
+            --bg-sidebar: #15151e;
+            --bg-card: #21212b;
+            --bg-input: #16161d;
+            --primary-color: #5b5ef5;
+            --text-white: #ffffff;
+            --text-gray: #a0a0b0;
+            --border-color: #383845;
+            --danger-color: #e05d5d;
+            /* 삭제 버튼 색상 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-white);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* === 2. 사이드바 (공통) === */
+        .sidebar {
+            width: 240px;
+            background-color: var(--bg-sidebar);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            border-right: 1px solid #2a2a35;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 40px;
+            padding-left: 10px;
+        }
+
+        .menu {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-gray);
+            font-size: 0.95rem;
+            transition: 0.2s;
+        }
+
+        .menu-item:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-white);
+        }
+
+        .menu-item.active {
+            background-color: var(--primary-color);
+            color: var(--text-white);
+        }
+
+        .menu-item i {
+            width: 20px;
+            text-align: center;
+        }
+
+        .setting-item {
+            margin-top: auto;
+        }
+
+        /* === 3. 메인 콘텐츠 (비디오 페이지) === */
+        .main-content {
+            flex: 1;
+            padding: 30px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            overflow-y: auto;
+        }
+
+        .content-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        .content-header h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        /* 메인 그리드 레이아웃 (좌우 2열) */
+        .video-layout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            /* 1:1 비율 */
+            gap: 25px;
+            flex: 1;
+            /* 남은 높이 채우기 */
+        }
+
+        .left-column,
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        /* 공통 카드 스타일 */
+        .card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+        }
+
+        .card h3 {
+            font-size: 1rem;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        /* --- 좌측 열 스타일 --- */
+        /* 이미지 선택 버튼 (점선) */
+        .file-select-btn {
+            border: 2px dashed #555;
+            border-radius: 8px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: var(--text-gray);
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .file-select-btn:hover {
+            border-color: var(--text-white);
+            color: var(--text-white);
+        }
+
+        /* 이미지 미리보기 영역 */
+        .image-preview-container {
+            position: relative;
+            width: 100%;
+            height: 180px;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .image-preview-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* 삭제 버튼 (X) */
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        /* 프롬프트 입력창 */
+        .prompt-textarea {
+            width: 100%;
+            height: 120px;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            color: var(--text-white);
+            resize: none;
+            outline: none;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .prompt-textarea:focus {
+            border-color: var(--primary-color);
+        }
+
+        /* --- 우측 열 스타일 --- */
+        /* 설정 입력 필드 그룹 */
+        .settings-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-group label {
+            font-size: 0.85rem;
+            color: var(--text-gray);
+        }
+
+        .input-group input {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            color: white;
+            outline: none;
+            font-size: 0.95rem;
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary-color);
+        }
+
+        /* 하단 버튼 영역 */
+        .bottom-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: auto;
+            /* 하단 고정 느낌 */
+            padding-top: 20px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+
+        /* === 4. 라이브러리 사이드바 (공통) === */
+        .library-sidebar {
+            width: 300px;
+            background-color: var(--bg-sidebar);
+            border-left: 1px solid #2a2a35;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .library-header h3 {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .library-nav {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-gray);
+            margin-bottom: 15px;
+        }
+
+        .project-selector {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            padding: 10px 15px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+
+        .library-items {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .library-items::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .library-items::-webkit-scrollbar-thumb {
+            background: #3e3e4a;
+            border-radius: 2px;
+        }
+
+        .lib-card {
+            background-color: #262633;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lib-preview {
+            height: 70px;
+            background-color: #323242;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .text-preview {
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+            padding: 15px;
+        }
+
+        .text-preview .line {
+            height: 4px;
+            background-color: #4d4d5e;
+            border-radius: 2px;
+            width: 70%;
+        }
+
+        .image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .audio-icon-preview {
+            color: #666;
+            font-size: 1.8rem;
+        }
+
+        .lib-info {
+            padding: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.7rem;
+            background-color: #21212b;
+        }
+
+        .tag {
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 500;
+        }
+
+        .tag.purple {
+            background-color: #7a5af5;
+        }
+
+        .tag.green {
+            background-color: #37a33b;
+        }
+
+        .tag.blue {
+            background-color: #2b5cdb;
+        }
+
+        .number {
+            color: var(--text-gray);
+        }
+
+        .filter-section {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-gray);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>AI Studio</span>
+            </div>
+            <ul class="menu">
+                <li class="menu-item"><i class="fa-regular fa-comment-dots"></i><span>스크립트</span></li>
+                <li class="menu-item"><i class="fa-solid fa-volume-high"></i><span>오디오</span></li>
+                <li class="menu-item"><i class="fa-regular fa-image"></i><span>이미지</span></li>
+                <li class="menu-item active"><i class="fa-regular fa-circle-play"></i><span>비디오</span></li>
+                <li class="menu-item setting-item"><i class="fa-solid fa-gear"></i><span>설정</span></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <div class="content-header">
+                <i class="fa-regular fa-circle-play"></i>
+                <h2>비디오</h2>
+            </div>
+
+            <div class="video-layout-grid">
+
+                <div class="left-column">
+                    <section class="card">
+                        <h3>이미지 업로드</h3>
+                        <div class="file-select-btn">
+                            <i class="fa-regular fa-image"></i>
+                            <span>Select Image File</span>
+                        </div>
+                        <div class="image-preview-container">
+                            <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80"
+                                alt="uploaded image">
+                            <button class="delete-btn"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    </section>
+                    <section class="card" style="flex: 1;">
+                        <h3>프롬프트</h3>
+                        <textarea class="prompt-textarea"></textarea>
+                    </section>
+                </div>
+
+                <div class="right-column">
+                    <section class="card" style="flex: 1;">
+                        <h3>비디오 설정</h3>
+                        <div class="settings-group">
+                            <div class="input-group">
+                                <label>해상도</label>
+                                <input type="text">
+                            </div>
+                            <div class="input-group">
+                                <label>카메라 움직임</label>
+                                <input type="text">
+                            </div>
+                            <div class="input-group">
+                                <label>영상길이</label>
+                                <input type="text">
+                            </div>
+                            <div class="input-group">
+                                <label>예시</label>
+                                <input type="text">
+                            </div>
+                            <div class="input-group">
+                                <label>예시</label>
+                                <input type="text">
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="bottom-actions">
+                <button class="btn-primary">비디오 생성</button>
+            </div>
+        </main>
+
+        <aside class="library-sidebar">
+            <div class="library-header">
+                <h3>Library</h3>
+            </div>
+            <div class="library-nav"><span>Workspace</span><span><i class="fa-solid fa-gear"></i> Manage</span></div>
+            <div class="project-selector"><span>New Project</span><i class="fa-solid fa-chevron-down"></i></div>
+            <div class="library-items">
+                <div class="lib-card">
+                    <div class="lib-preview text-preview">
+                        <div class="line"></div>
+                        <div class="line"></div>
+                    </div>
+                    <div class="lib-info"><span class="tag purple">스크립트</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#1</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview"><i class="fa-solid fa-music audio-icon-preview"></i></div>
+                    <div class="lib-info"><span class="tag green">오디오</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#2</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#3</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#4</span></div>
+                </div>
+            </div>
+            <div class="filter-section"><span>필터</span></div>
+        </aside>
+    </div>
+
+</body>
+
+</html>

@@ -1,46 +1,33 @@
 import { NextResponse } from 'next/server';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 
-// Lazy initialization
-let client: TextToSpeechClient | null = null;
-
-function getClient() {
-    if (!client) {
-        // 1. Try to get credentials from JSON environment variable (Best for Vercel)
-        const credentialsJson = process.env.GOOGLE_CREDENTIALS_JSON;
-
-        if (credentialsJson) {
-            try {
-                const credentials = JSON.parse(credentialsJson);
-                client = new TextToSpeechClient({
-                    credentials
-                });
-                return client;
-            } catch (error) {
-                console.error('Failed to parse GOOGLE_CREDENTIALS_JSON:', error);
-                // Fall through to file path check
-            }
-        }
-
-        // 2. Try to get credentials from file path (Best for Local Dev)
-        const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-
-        if (credentialsPath) {
-            client = new TextToSpeechClient({
-                keyFilename: credentialsPath
-            });
-        } else {
-            throw new Error('Google Cloud Credentials not found. Set GOOGLE_CREDENTIALS_JSON or GOOGLE_APPLICATION_CREDENTIALS.');
-        }
+function getClient(googleCredsJson: string) {
+    try {
+        const credentials = JSON.parse(googleCredsJson);
+        return new TextToSpeechClient({ credentials });
+    } catch (error) {
+        console.error('Failed to parse Google credentials:', error);
+        throw new Error('Invalid Google credentials format');
     }
-    return client;
 }
 
 export async function POST(request: Request) {
     try {
         const { text, voiceId, speed } = await request.json();
 
-        const [response] = await getClient().synthesizeSpeech({
+        // Get API key from header (BYOK)
+        const userGoogleCreds = request.headers.get('x-google-credentials');
+
+        if (!userGoogleCreds) {
+            return NextResponse.json(
+                { error: '설정에서 Google Credentials를 먼저 입력해주세요.' },
+                { status: 401 }
+            );
+        }
+
+        const client = getClient(userGoogleCreds);
+
+        const [response] = await client.synthesizeSpeech({
             input: { text },
             voice: {
                 languageCode: 'ko-KR',
@@ -57,7 +44,6 @@ export async function POST(request: Request) {
             throw new Error('No audio content returned');
         }
 
-        // Convert Uint8Array to base64 string
         // Convert Uint8Array to base64 string
         const buffer = Buffer.from(audioContent as Uint8Array);
         const base64Audio = buffer.toString('base64');
@@ -106,12 +92,6 @@ export async function POST(request: Request) {
 
     } catch (error) {
         console.error('Audio generation error:', error);
-        console.error('Error details:', {
-            message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-            hasCredentials: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
-            credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS
-        });
         return NextResponse.json({
             error: 'Failed to generate audio',
             details: error instanceof Error ? error.message : 'Unknown error'

@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
-
 export async function POST(request: Request) {
   try {
     const { prompt, settings } = await request.json();
+
+    // Get API key from header (BYOK - Bring Your Own Key)
+    const userApiKey = request.headers.get('x-openai-key');
+
+    if (!userApiKey) {
+      return NextResponse.json(
+        { error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' },
+        { status: 401 }
+      );
+    }
+
+    const openai = new OpenAI({
+      apiKey: userApiKey,
+    });
 
     const systemInstruction = `You are an expert scriptwriter for short-form video content.
 Generate a script based on the user's prompt and settings.
@@ -44,14 +54,10 @@ Example Output:
     return NextResponse.json({ script });
   } catch (error) {
     console.error('Script generation error:', error);
-    console.error('Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      apiKey: process.env.OPENAI_API_KEY ? 'Present' : 'Missing'
-    });
-    return NextResponse.json({
-      error: 'Failed to generate script',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to generate script', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
   }
 }
+

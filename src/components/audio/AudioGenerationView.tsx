@@ -23,6 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import toast, { Toaster } from 'react-hot-toast';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 interface Scene {
     id: number;
@@ -168,6 +169,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     const audioRefs = useRef<{ [key: number]: HTMLAudioElement | null }>({});
 
     const { updateScene, updateScenes, saveCurrentProject, updateProjectInfo } = useProjectStore();
+    const { googleCredentials } = useSettingsStore();
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -199,11 +201,19 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     };
 
     const handleGenerateAudio = async (scene: Scene, voiceId?: string) => {
+        if (!googleCredentials) {
+            toast.error('설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.');
+            return;
+        }
+
         setGeneratingId(scene.id);
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-google-credentials': googleCredentials
+                },
                 body: JSON.stringify({
                     text: scene.text,
                     voiceId: voiceId || selectedVoice.id,
@@ -211,13 +221,16 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 }),
             });
 
-            if (!response.ok) throw new Error('Audio generation failed');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Audio generation failed');
+            }
 
             const data = await response.json();
             updateScene(scene.id, { audioUrl: data.audioUrl });
         } catch (error) {
             console.error(error);
-            toast.error('오디오 생성 실패');
+            toast.error('오디오 생성 실패: ' + (error instanceof Error ? error.message : 'Unknown error'));
         } finally {
             setGeneratingId(null);
         }
@@ -235,10 +248,18 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     };
 
     const handleVoicePreview = async (voice: TTSVoice) => {
+        if (!googleCredentials) {
+            toast.error('설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.');
+            return;
+        }
+
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-google-credentials': googleCredentials
+                },
                 body: JSON.stringify({
                     text: '안녕하세요. 저는 ' + voice.name + ' 입니다.',
                     voiceId: voice.id,
@@ -246,14 +267,17 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 }),
             });
 
-            if (!response.ok) throw new Error('Preview failed');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Preview failed');
+            }
 
             const data = await response.json();
             const audio = new Audio(data.audioUrl);
             audio.play();
         } catch (error) {
             console.error('Preview error:', error);
-            toast.error('Preview failed');
+            toast.error('Preview failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
         }
     };
 

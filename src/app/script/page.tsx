@@ -4,6 +4,7 @@ import { MessageSquare, Upload, Wand2, FileText, Download, FileInput } from 'luc
 import { useState, useRef } from 'react';
 import { ScriptResultModal } from '@/components/script/ScriptResultModal';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 interface ScriptSettings {
     target: string;
@@ -31,6 +32,7 @@ export default function ScriptPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const templateInputRef = useRef<HTMLInputElement>(null);
     const { createProject, updateScenes, saveCurrentProject } = useProjectStore();
+    const { openaiKey } = useSettingsStore();
 
     const handleSettingChange = (key: keyof ScriptSettings, value: string) => {
         setSettings(prev => ({ ...prev, [key]: value }));
@@ -77,17 +79,28 @@ export default function ScriptPage() {
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
 
+        if (!openaiKey) {
+            alert('설정에서 OpenAI API 키를 먼저 입력해주세요.');
+            return;
+        }
+
         setIsGenerating(true);
         try {
             const enhancedPrompt = buildEnhancedPrompt();
 
             const response = await fetch('/api/script/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-openai-key': openaiKey
+                },
                 body: JSON.stringify({ prompt: enhancedPrompt }),
             });
 
-            if (!response.ok) throw new Error('Failed to generate script');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to generate script');
+            }
 
             const data = await response.json();
 

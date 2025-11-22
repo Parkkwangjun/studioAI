@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Studio - Image Generation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* === 1. 변수 및 기본 설정 === */
+        :root {
+            --bg-dark: #181820;
+            --bg-sidebar: #15151e;
+            --bg-card: #21212b;
+            --bg-input: #16161d;
+            --primary-color: #5b5ef5;
+            --text-white: #ffffff;
+            --text-gray: #a0a0b0;
+            --border-color: #383845;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-white);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* === 2. 사이드바 (공통) === */
+        .sidebar {
+            width: 240px;
+            background-color: var(--bg-sidebar);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            border-right: 1px solid #2a2a35;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 40px;
+            padding-left: 10px;
+        }
+
+        .menu {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-gray);
+            font-size: 0.95rem;
+            transition: 0.2s;
+        }
+
+        .menu-item:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-white);
+        }
+
+        .menu-item.active {
+            background-color: var(--primary-color);
+            color: var(--text-white);
+        }
+
+        .menu-item i {
+            width: 20px;
+            text-align: center;
+        }
+
+        .setting-item {
+            margin-top: auto;
+        }
+
+        /* === 3. 메인 콘텐츠 (이미지 페이지) === */
+        .main-content {
+            flex: 1;
+            padding: 30px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            overflow-y: auto;
+            /* 전체 스크롤 */
+        }
+
+        .main-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .main-content::-webkit-scrollbar-thumb {
+            background: #3e3e4a;
+            border-radius: 4px;
+        }
+
+        /* 상단 헤더 */
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-title h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .btn-primary-large {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        /* 설정 섹션 카드 */
+        .settings-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .settings-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .settings-header span {
+            font-size: 0.85rem;
+            color: var(--text-gray);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .fixed-input {
+            flex: 1;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 15px;
+            color: white;
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--text-gray);
+            color: var(--text-white);
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        /* 이미지 리스트 그리드 */
+        .image-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            /* 2열 */
+            gap: 20px;
+        }
+
+        /* 개별 이미지 카드 */
+        .image-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-id {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .btn-small {
+            background-color: #3e3e50;
+            color: #c0c0c0;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        /* 카드 본문 레이아웃 (좌측 텍스트, 우측 프리뷰) */
+        .card-body {
+            display: flex;
+            gap: 15px;
+            height: 180px;
+        }
+
+        .text-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow: hidden;
+        }
+
+        .preview-section {
+            width: 180px;
+            flex-shrink: 0;
+        }
+
+        /* 텍스트 영역 스타일 */
+        .text-block {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .text-label {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: var(--text-gray);
+        }
+
+        .script-content {
+            font-size: 0.85rem;
+            color: #e0e0e0;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* 프롬프트 영역 (스크롤 가능) */
+        .prompt-area {
+            flex: 1;
+            background-color: var(--bg-input);
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 0.85rem;
+            color: #d0d0d0;
+            overflow-y: auto;
+            line-height: 1.4;
+        }
+
+        /* 프롬프트 스크롤바 커스텀 */
+        .prompt-area::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .prompt-area::-webkit-scrollbar-thumb {
+            background: #4a4a55;
+            border-radius: 2px;
+        }
+
+        /* 프리뷰 영역 스타일 */
+        .preview-box {
+            width: 100%;
+            height: 100%;
+            background-color: #323242;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-gray);
+            font-size: 0.9rem;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .preview-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+
+        /* === 4. 라이브러리 사이드바 (공통) === */
+        .library-sidebar {
+            width: 300px;
+            background-color: var(--bg-sidebar);
+            border-left: 1px solid #2a2a35;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .library-header h3 {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .library-nav {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-gray);
+            margin-bottom: 15px;
+        }
+
+        .project-selector {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            padding: 10px 15px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+
+        .library-items {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .library-items::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .library-items::-webkit-scrollbar-thumb {
+            background: #3e3e4a;
+            border-radius: 2px;
+        }
+
+        .lib-card {
+            background-color: #262633;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lib-preview {
+            height: 70px;
+            background-color: #323242;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .text-preview {
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+            padding: 15px;
+        }
+
+        .text-preview .line {
+            height: 4px;
+            background-color: #4d4d5e;
+            border-radius: 2px;
+            width: 70%;
+        }
+
+        .image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .audio-icon-preview {
+            color: #666;
+            font-size: 1.8rem;
+        }
+
+        .lib-info {
+            padding: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.7rem;
+            background-color: #21212b;
+        }
+
+        .tag {
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 500;
+        }
+
+        .tag.purple {
+            background-color: #7a5af5;
+        }
+
+        .tag.green {
+            background-color: #37a33b;
+        }
+
+        .tag.blue {
+            background-color: #2b5cdb;
+        }
+
+        .number {
+            color: var(--text-gray);
+        }
+
+        .filter-section {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-gray);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>AI Studio</span>
+            </div>
+            <ul class="menu">
+                <li class="menu-item">
+                    <i class="fa-regular fa-comment-dots"></i>
+                    <span>스크립트</span>
+                </li>
+                <li class="menu-item">
+                    <i class="fa-solid fa-volume-high"></i>
+                    <span>오디오</span>
+                </li>
+                <li class="menu-item active">
+                    <i class="fa-regular fa-image"></i>
+                    <span>이미지</span>
+                </li>
+                <li class="menu-item">
+                    <i class="fa-regular fa-circle-play"></i>
+                    <span>비디오</span>
+                </li>
+                <li class="menu-item setting-item">
+                    <i class="fa-solid fa-gear"></i>
+                    <span>설정</span>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <div class="content-header">
+                <div class="header-title">
+                    <i class="fa-regular fa-image"></i>
+                    <h2>이미지</h2>
+                </div>
+                <button class="btn-primary-large">전체 이미지 생성</button>
+            </div>
+
+            <section class="settings-card">
+                <div class="settings-header">
+                    <h3>이미지 설정</h3>
+                    <span>일관된 출력물을 위한 프롬프트를 작성해주세요.</span>
+                </div>
+                <div class="input-row">
+                    <input type="text" class="fixed-input" placeholder="고정 프롬프트 입력">
+                    <button class="btn-outline">이미지 프롬프트 생성</button>
+                </div>
+            </section>
+
+            <div class="image-grid">
+
+                <div class="image-card">
+                    <div class="card-header">
+                        <span class="card-id">#1</span>
+                        <button class="btn-small">생성</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-section">
+                            <div class="text-block">
+                                <span class="text-label">스크립트</span>
+                                <p class="script-content">안녕하세요 이건 예시 스크립트 대본입니다.</p>
+                            </div>
+                            <div class="text-block" style="flex: 1; overflow: hidden;">
+                                <span class="text-label">프롬프트</span>
+                                <div class="prompt-area">
+                                    생성할 이미지 시각화 장면 묘사 프롬프트가 입력됩니다. 수정도 가능합니다. 내용이 길어지면 여기에 스크롤바가 생깁니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-section">
+                            <div class="preview-box">
+                                <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&q=80"
+                                    alt="generated image">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="image-card">
+                    <div class="card-header">
+                        <span class="card-id">#1</span>
+                        <button class="btn-small">생성</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-section">
+                            <div class="text-block">
+                                <span class="text-label">스크립트</span>
+                                <p class="script-content">안녕하세요 이건 예시 스크립트 대본입니다.</p>
+                            </div>
+                            <div class="text-block" style="flex: 1; overflow: hidden;">
+                                <span class="text-label">프롬프트</span>
+                                <div class="prompt-area">
+                                    생성할 이미지 시각화 장면 묘사 프롬프트가 입력됩니다. 수정도 가능합니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-section">
+                            <div class="preview-box">
+                                <span>프리뷰</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="image-card">
+                    <div class="card-header">
+                        <span class="card-id">#1</span>
+                        <button class="btn-small">생성</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-section">
+                            <div class="text-block">
+                                <span class="text-label">스크립트</span>
+                                <p class="script-content">안녕하세요 이건 예시 스크립트 대본입니다.</p>
+                            </div>
+                            <div class="text-block" style="flex: 1; overflow: hidden;">
+                                <span class="text-label">프롬프트</span>
+                                <div class="prompt-area">
+                                    생성할 이미지 시각화 장면 묘사 프롬프트가 입력됩니다. 수정도 가능합니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-section">
+                            <div class="preview-box">
+                                <span>프리뷰</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="image-card">
+                    <div class="card-header">
+                        <span class="card-id">#1</span>
+                        <button class="btn-small">생성</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-section">
+                            <div class="text-block">
+                                <span class="text-label">스크립트</span>
+                                <p class="script-content">안녕하세요 이건 예시 스크립트 대본입니다.</p>
+                            </div>
+                            <div class="text-block" style="flex: 1; overflow: hidden;">
+                                <span class="text-label">프롬프트</span>
+                                <div class="prompt-area">
+                                    생성할 이미지 시각화 장면 묘사 프롬프트가 입력됩니다. 수정도 가능합니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-section">
+                            <div class="preview-box">
+                                <span>프리뷰</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="image-card">
+                    <div class="card-header">
+                        <span class="card-id">#1</span>
+                        <button class="btn-small">생성</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-section">
+                            <div class="text-block">
+                                <span class="text-label">스크립트</span>
+                                <p class="script-content">안녕하세요 이건 예시 스크립트 대본입니다.</p>
+                            </div>
+                            <div class="text-block" style="flex: 1; overflow: hidden;">
+                                <span class="text-label">프롬프트</span>
+                                <div class="prompt-area">
+                                    생성할 이미지 시각화 장면 묘사 프롬프트가 입력됩니다. 수정도 가능합니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-section">
+                            <div class="preview-box">
+                                <span>프리뷰</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="image-card">
+                    <div class="card-header">
+                        <span class="card-id">#1</span>
+                        <button class="btn-small">생성</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-section">
+                            <div class="text-block">
+                                <span class="text-label">스크립트</span>
+                                <p class="script-content">안녕하세요 이건 예시 스크립트 대본입니다.</p>
+                            </div>
+                            <div class="text-block" style="flex: 1; overflow: hidden;">
+                                <span class="text-label">프롬프트</span>
+                                <div class="prompt-area">
+                                    생성할 이미지 시각화 장면 묘사 프롬프트가 입력됩니다. 수정도 가능합니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-section">
+                            <div class="preview-box">
+                                <span>프리뷰</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <aside class="library-sidebar">
+            <div class="library-header">
+                <h3>Library</h3>
+            </div>
+            <div class="library-nav">
+                <span>Workspace</span>
+                <span><i class="fa-solid fa-gear"></i> Manage</span>
+            </div>
+            <div class="project-selector">
+                <span>New Project</span>
+                <i class="fa-solid fa-chevron-down"></i>
+            </div>
+
+            <div class="library-items">
+                <div class="lib-card">
+                    <div class="lib-preview text-preview">
+                        <div class="line"></div>
+                        <div class="line"></div>
+                    </div>
+                    <div class="lib-info"><span class="tag purple">스크립트</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#1</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview"><i class="fa-solid fa-music audio-icon-preview"></i></div>
+                    <div class="lib-info"><span class="tag green">오디오</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#2</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#3</span></div>
+                </div>
+                <div class="lib-card">
+                    <div class="lib-preview image-preview"><img
+                            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
+                            alt="img"></div>
+                    <div class="lib-info"><span class="tag blue">이미지</span><span class="number">#4</span></div>
+                </div>
+            </div>
+            <div class="filter-section"><span>필터</span></div>
+        </aside>
+    </div>
+
+</body>
+
+</html>

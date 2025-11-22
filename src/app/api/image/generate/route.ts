@@ -3,20 +3,15 @@ import * as fal from '@fal-ai/serverless-client';
 import OpenAI from 'openai';
 import { uploadAssetFromUrl } from '@/lib/supabase/storage';
 
-// Configure Fal.ai client with API key
-fal.config({
-    credentials: process.env.FAL_KEY || process.env.FAL_API_KEY
-});
 
-// Initialize OpenAI for prompt optimization
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || '',
-});
 
-async function optimizePromptForFlux(koreanPrompt: string): Promise<string> {
+async function optimizePromptForFlux(koreanPrompt: string, openaiKey: string): Promise<string> {
+    const openai = new OpenAI({ apiKey: openaiKey });
+
     try {
         console.log('🎨 Optimizing image prompt using JSON Style Guide...');
         console.log('Original Prompt (KR):', koreanPrompt);
+
 
         const systemPrompt = `You are an expert AI image generation prompt engineer using JSON Style Guides for FLUX models.
 
@@ -149,7 +144,28 @@ export async function POST(request: Request) {
     try {
         const { prompt, imageSize, guidanceScale, model } = await request.json();
 
-        console.log('\n========================================');
+        // Get API keys from headers (BYOK)
+        const userFalKey = request.headers.get('x-fal-key');
+        const userOpenAiKey = request.headers.get('x-openai-key');
+
+        if (!userFalKey) {
+            return NextResponse.json(
+                { error: '설정에서 FAL API 키를 먼저 입력해주세요.' },
+                { status: 401 }
+            );
+        }
+
+        if (!userOpenAiKey) {
+            return NextResponse.json(
+                { error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' },
+                { status: 401 }
+            );
+        }
+
+        // Configure Fal.ai client with user's key
+        fal.config({ credentials: userFalKey });
+
+        console.log('\\n========================================');
         console.log('=== IMAGE GENERATION REQUEST START ===');
         console.log('========================================');
         console.log('Timestamp:', new Date().toISOString());
@@ -157,7 +173,6 @@ export async function POST(request: Request) {
         console.log('Image Size:', imageSize);
         console.log('Guidance Scale:', guidanceScale);
         console.log('Model:', model);
-        console.log('FAL_KEY configured:', !!(process.env.FAL_KEY || process.env.FAL_API_KEY));
 
         if (!prompt || prompt.trim() === '') {
             console.error('❌ ERROR: Empty prompt received');
@@ -165,7 +180,7 @@ export async function POST(request: Request) {
         }
 
         // Optimize using JSON Style Guide methodology
-        const optimizedEnglishPrompt = await optimizePromptForFlux(prompt.trim());
+        const optimizedEnglishPrompt = await optimizePromptForFlux(prompt.trim(), userOpenAiKey);
 
         // Determine model ID and parameters based on selection
         const modelId = model === 'schnell' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';

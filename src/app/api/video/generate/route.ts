@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const KIE_API_KEY = process.env.KIE_API_KEY;
+async function optimizeVideoPrompt(koreanPrompt: string, openaiKey: string): Promise<string> {
+    const openai = new OpenAI({ apiKey: openaiKey });
 
-// Initialize OpenAI for prompt optimization
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || '',
-});
-
-async function optimizeVideoPrompt(koreanPrompt: string): Promise<string> {
     try {
         console.log('🎬 Optimizing video prompt using JSON Style Guide...');
         console.log('Original Prompt (KR):', koreanPrompt);
@@ -124,10 +119,10 @@ Return ONLY the optimized English prompt as a single flowing paragraph. Do NOT o
 
         const optimizedPrompt = completion.choices[0].message.content?.trim() || koreanPrompt;
 
-        console.log('\n--- JSON Style Guide Video Optimization Result ---');
+        console.log('\\n--- JSON Style Guide Video Optimization Result ---');
         console.log('Optimized Prompt (EN):', optimizedPrompt);
         console.log('Character count:', optimizedPrompt.length);
-        console.log('✅ Optimization complete\n');
+        console.log('✅ Optimization complete\\n');
 
         return optimizedPrompt;
     } catch (error) {
@@ -158,7 +153,25 @@ export async function POST(request: Request) {
     try {
         const { imageUrl, prompt, model, mode, duration, resolution } = await request.json();
 
-        console.log('\n========================================');
+        // Get API keys from headers (BYOK)
+        const userKieKey = request.headers.get('x-kie-key');
+        const userOpenAiKey = request.headers.get('x-openai-key');
+
+        if (!userKieKey) {
+            return NextResponse.json(
+                { error: '설정에서 KIE API 키를 먼저 입력해주세요.' },
+                { status: 401 }
+            );
+        }
+
+        if (!userOpenAiKey) {
+            return NextResponse.json(
+                { error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' },
+                { status: 401 }
+            );
+        }
+
+        console.log('\\n========================================');
         console.log('=== VIDEO GENERATION REQUEST START ===');
         console.log('========================================');
         console.log('Timestamp:', new Date().toISOString());
@@ -168,15 +181,10 @@ export async function POST(request: Request) {
         console.log('Mode:', mode);
         console.log('Duration:', duration);
         console.log('Resolution:', resolution);
-        console.log('KIE API Key:', KIE_API_KEY ? 'Present' : 'Missing');
-
-        if (!KIE_API_KEY) {
-            throw new Error('KIE_API_KEY is not configured');
-        }
 
         // Optimize using JSON Style Guide methodology for video
         const optimizedPrompt = prompt
-            ? await optimizeVideoPrompt(prompt)
+            ? await optimizeVideoPrompt(prompt, userOpenAiKey)
             : "Animate this image with smooth, cinematic motion, natural movement, professional cinematography, 4K quality, no text or captions";
 
         let requestBody;
@@ -205,15 +213,15 @@ export async function POST(request: Request) {
             };
         }
 
-        console.log('\n--- KIE API Request Payload ---');
+        console.log('\\n--- KIE API Request Payload ---');
         console.log(JSON.stringify(requestBody, null, 2));
 
-        console.log('\n--- Calling KIE API ---');
+        console.log('\\n--- Calling KIE API ---');
         const createTaskResponse = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${KIE_API_KEY}`
+                'Authorization': `Bearer ${userKieKey}`
             },
             body: JSON.stringify(requestBody)
         });
@@ -241,11 +249,11 @@ export async function POST(request: Request) {
             throw new Error('No taskId returned from KIE');
         }
 
-        console.log('\n--- Video Generation Success ---');
+        console.log('\\n--- Video Generation Success ---');
         console.log('✅ Task ID:', taskId);
         console.log('✅ Model:', model);
         console.log('✅ Optimized Prompt (EN):', optimizedPrompt);
-        console.log('========================================\n');
+        console.log('========================================\\n');
 
         return NextResponse.json({
             taskId,
@@ -256,16 +264,15 @@ export async function POST(request: Request) {
         });
 
     } catch (error) {
-        console.error('\n========================================');
+        console.error('\\n========================================');
         console.error('❌ VIDEO GENERATION ERROR');
         console.error('========================================');
         console.error('Error:', error);
         console.error('Error details:', {
             message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-            hasApiKey: !!KIE_API_KEY
+            stack: error instanceof Error ? error.stack : undefined
         });
-        console.error('========================================\n');
+        console.error('========================================\\n');
 
         return NextResponse.json({
             error: 'Failed to start video generation',
