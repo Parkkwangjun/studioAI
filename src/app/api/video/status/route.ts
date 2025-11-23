@@ -4,7 +4,7 @@ import { uploadAssetFromUrl } from '@/lib/supabase/storage';
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
-    const userKieKey = request.headers.get('x-kie-key') || process.env.KIE_API_KEY;
+    const userKieKey = request.headers.get('x-kie-key');
 
     if (!userKieKey) {
         return NextResponse.json({ error: 'KIE API key missing' }, { status: 401 });

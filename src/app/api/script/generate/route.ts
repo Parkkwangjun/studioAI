@@ -5,12 +5,12 @@ export async function POST(request: Request) {
   try {
     const { prompt } = await request.json();
 
-    // Get API key from header (BYOK) or Server Env (Fallback)
-    const userApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY;
+    // Get API key from header (BYOK)
+    const userApiKey = request.headers.get('x-openai-key');
 
     if (!userApiKey) {
       return NextResponse.json(
-        { error: 'OpenAI API Key is missing (Check Settings or Server Env)' },
+        { error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' },
         { status: 401 }
       );
     }

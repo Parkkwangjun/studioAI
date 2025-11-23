@@ -36,27 +36,9 @@ export async function POST(request: Request) {
             }
         }
 
-        // Fallback to Server Environment Variable if header is missing or invalid
+        // Fallback removed to enforce BYOK
         if (!googleCredsJson) {
-            // Try to read from env var (content)
-            if (process.env.GOOGLE_CREDENTIALS_JSON) {
-                googleCredsJson = process.env.GOOGLE_CREDENTIALS_JSON;
-            }
-            // Try to read from file (local dev only)
-            else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-                try {
-                    const fs = await import('fs');
-                    if (fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
-                        googleCredsJson = fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf-8');
-                    }
-                } catch (e) {
-                    console.error('Failed to read local credentials file:', e);
-                }
-            }
-        }
-
-        if (!googleCredsJson) {
-            return NextResponse.json({ error: 'Google Cloud Credentials missing (Check Settings or Server Env)' }, { status: 401 });
+            return NextResponse.json({ error: '설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.' }, { status: 401 });
         }
 
         const client = getClient(googleCredsJson);

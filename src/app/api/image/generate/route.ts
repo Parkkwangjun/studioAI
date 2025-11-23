@@ -66,16 +66,16 @@ export async function POST(request: Request) {
     try {
         const { prompt, imageSize, guidanceScale, model } = await request.json();
 
-        // Get API keys from headers (BYOK) or Fallback to Server Env
-        const userFalKey = request.headers.get('x-fal-key') || process.env.FAL_KEY;
-        const userOpenAiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY;
+        // Get API keys from headers (BYOK)
+        const userFalKey = request.headers.get('x-fal-key');
+        const userOpenAiKey = request.headers.get('x-openai-key');
 
         if (!userFalKey) {
-            return NextResponse.json({ error: 'FAL API Key is missing' }, { status: 401 });
+            return NextResponse.json({ error: '설정에서 FAL API 키를 먼저 입력해주세요.' }, { status: 401 });
         }
 
         if (!userOpenAiKey) {
-            return NextResponse.json({ error: 'OpenAI API Key is missing' }, { status: 401 });
+            return NextResponse.json({ error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' }, { status: 401 });
         }
 
         // Configure Fal.ai client with user's key
