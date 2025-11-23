@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Wand2, MessageSquare, Volume2, Image as ImageIcon, PlayCircle, Settings } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Wand2, MessageSquare, Volume2, Image as ImageIcon, PlayCircle, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import SettingsModal from '@/components/settings/SettingsModal';
+import { createClient } from '@/lib/supabase/client';
+import toast from 'react-hot-toast';
 
 const menuItems = [
     { href: '/script', label: '스크립트', icon: MessageSquare },
@@ -17,7 +19,20 @@ const menuItems = [
 
 export function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const supabase = createClient();
+
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut();
+            toast.success('로그아웃 되었습니다');
+            router.push('/login');
+            router.refresh();
+        } catch (error) {
+            toast.error('로그아웃 실패');
+        }
+    };
 
     if (pathname === '/login') return null;
 
@@ -71,6 +86,14 @@ export function Sidebar() {
                     >
                         <Settings className="w-5 h-5 text-center" />
                         <span>설정</span>
+                    </button>
+
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-[15px] px-[15px] py-3 rounded-lg cursor-pointer text-[0.95rem] transition-colors duration-200 text-[var(--text-gray)] hover:bg-white/5 hover:text-red-400"
+                    >
+                        <LogOut className="w-5 h-5 text-center" />
+                        <span>로그아웃</span>
                     </button>
                 </div>
             </nav>

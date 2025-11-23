@@ -20,12 +20,25 @@ export default function LoginPage() {
 
         try {
             if (isSignUp) {
-                const { error } = await supabase.auth.signUp({
+                const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
+                    options: {
+                        emailRedirectTo: `${window.location.origin}/auth/callback`,
+                    }
                 });
                 if (error) throw error;
-                toast.success('회원가입 성공! 이메일을 확인해주세요.');
+
+                // Check if email confirmation is required
+                if (data?.user?.identities?.length === 0) {
+                    toast.error('이 이메일은 이미 사용 중입니다.');
+                } else if (data?.user && !data?.session) {
+                    toast.success('회원가입 성공! 이메일을 확인해주세요.');
+                } else {
+                    toast.success('회원가입 및 로그인 성공!');
+                    router.push('/library');
+                    router.refresh();
+                }
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
@@ -37,7 +50,9 @@ export default function LoginPage() {
                 router.refresh();
             }
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : '인증 실패');
+            console.error('Auth error:', error);
+            const errorMessage = error instanceof Error ? error.message : '인증 실패';
+            toast.error(errorMessage);
         } finally {
             setIsLoading(false);
         }
