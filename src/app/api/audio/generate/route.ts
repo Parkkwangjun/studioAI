@@ -31,8 +31,19 @@ export async function POST(request: Request) {
             try {
                 // Decode Base64 safely (compatible with browsers & Node)
                 googleCredsJson = decodeURIComponent(escape(atob(encodedCreds)));
+
+                // Validate JSON format immediately
+                try {
+                    JSON.parse(googleCredsJson);
+                } catch (jsonError) {
+                    console.error('Invalid JSON structure in credentials:', jsonError);
+                    return NextResponse.json({
+                        error: 'Google Credentials 형식이 올바르지 않습니다. 파일 경로가 아닌 JSON 내용 전체를 입력했는지 확인해주세요.'
+                    }, { status: 400 });
+                }
             } catch (e) {
                 console.error('Failed to decode Google credentials:', e);
+                return NextResponse.json({ error: 'Google Credentials 디코딩 실패' }, { status: 400 });
             }
         }
 

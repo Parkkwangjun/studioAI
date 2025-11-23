@@ -117,8 +117,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             onChange={(e) => setLocalGoogle(e.target.value)}
                             placeholder='{"type": "service_account", "project_id": "...", ...}'
                             rows={4}
-                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 font-mono text-xs"
+                            className={`w-full px-4 py-3 bg-white/5 border rounded-lg text-white placeholder:text-white/30 focus:outline-none font-mono text-xs ${localGoogle && !localGoogle.trim().startsWith('{')
+                                    ? 'border-red-500/50 focus:border-red-500'
+                                    : 'border-white/10 focus:border-blue-500/50'
+                                }`}
                         />
+                        {localGoogle && !localGoogle.trim().startsWith('{') && (
+                            <p className="text-xs text-red-400 font-bold">
+                                ⚠️ 파일 경로가 아닌, JSON 파일의 내용 전체를 복사해서 붙여넣어야 합니다.
+                            </p>
+                        )}
                         <p className="text-xs text-white/40">
                             음성 생성(TTS)에 사용됩니다. JSON 파일 내용 전체를 붙여넣으세요.
                         </p>

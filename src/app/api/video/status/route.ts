@@ -25,13 +25,16 @@ export async function GET(request: Request) {
             );
         }
 
-        // CORRECT ENDPOINT: /recordInfo not /getTask
         const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`;
-        console.log('Requesting:', url);
+        console.log('Requesting KIE Status:', url);
 
+        // Try 'Authorization: Bearer <key>' first, as it is standard. 
+        // If KIE uses a different header like 'X-API-KEY', it should be documented.
+        // Assuming Bearer is correct for now, but adding detailed error logging.
         const response = await fetch(url, {
             headers: {
-                'Authorization': `Bearer ${userKieKey}`
+                'Authorization': `Bearer ${userKieKey}`,
+                'Content-Type': 'application/json'
             }
         });
 
