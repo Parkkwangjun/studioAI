@@ -3,14 +3,14 @@ import OpenAI from 'openai';
 
 export async function POST(request: Request) {
   try {
-    const { prompt, settings } = await request.json();
+    const { prompt } = await request.json();
 
-    // Get API key from header (BYOK - Bring Your Own Key)
-    const userApiKey = request.headers.get('x-openai-key');
+    // Get API key from header (BYOK) or Server Env (Fallback)
+    const userApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY;
 
     if (!userApiKey) {
       return NextResponse.json(
-        { error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' },
+        { error: 'OpenAI API Key is missing (Check Settings or Server Env)' },
         { status: 401 }
       );
     }
@@ -60,4 +60,3 @@ Example Output:
     );
   }
 }
-

@@ -1,0 +1,243 @@
+AI STUDIO – SERVICES INTEGRATION SPEC
+=====================================
+
+Purpose
+-------
+This document defines how external services (LLM, FAL, Google TTS, KIE Image-To-Video, Supabase) are connected together inside the AI Studio workflow.
+It is the glue-spec between data model, backend API and UI flows.
+
+External Services
+-----------------
+1) LLM (Gemini or equivalent) – for script generation
+2) FAL.ai FLUX – for image generation
+3) Google TTS – for text-to-speech
+4) KIE AI Image-To-Video – for video generation from image URLs
+5) Supabase
+   - Postgres DB (via Prisma)
+   - Storage bucket `aiauto` for permanent asset URLs
+
+All secrets (API keys, project IDs, etc.) should be loaded from environment variables, even if a separate txt file documents them.
+
+ENV Variable Examples
+---------------------
+LLM / Gemini
+  - GEMINI_API_KEY
+
+FAL.ai
+  - FAL_API_KEY
+
+Google TTS
+  - GOOGLE_PROJECT_ID
+  - GOOGLE_TTS_LOCATION
+  - GOOGLE_TTS_SERVICE_ACCOUNT_JSON (or path)
+
+KIE AI
+  - KIE_DONWON_API_KEY
+
+Supabase
+  - SUPABASE_URL
+  - SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY (server only, optional)
+  - SUPABASE_STORAGE_BUCKET=aiauto
+
+High-Level Workflow (End-to-End)
+--------------------------------
+1. User enters prompt → Script generation (LLM).
+2. Script is split into Scenes and stored in DB.
+3. For each Scene:
+   - user can generate Audio (Google TTS),
+   - user can generate Image (FAL),
+   - images are uploaded to Supabase and stored as ImageAsset.
+4. User selects images → Video generation (KIE) using Supabase image URLs.
+5. Generated videos are stored as VideoClip records and can be previewed & downloaded from the UI.
+
+Service-by-Service Integration
+------------------------------
+
+1) LLM – Script Generation
+--------------------------
+Responsible for: turning a high-level prompt + options into a structured script.
+
+Backend steps:
+1. Receive POST /api/script/generate with { prompt, options }.
+2. Build structured prompt according to product requirements (tone, length, etc.).
+3. Call LLM (Gemini) with this prompt.
+4. Parse response text into scene list (array of strings).
+5. Create Project row.
+6. Create Scene rows with index = 1..N.
+7. Return projectId + scenes[] to frontend.
+
+Error handling:
+- If LLM call fails → return 500 with descriptive error.
+- Do NOT create partial scenes if response is invalid; rollback transaction.
+
+2) FAL.ai – Image Generation
+----------------------------
+Responsible for: generating scene-level images.
+
+Backend steps:
+1. Frontend calls POST /api/image/generate with:
+   - sceneId
+   - stylePrompt
+   - modelOptions (size, steps, etc.)
+
+2. Backend:
+   - Fetch Scene + Project for context.
+   - Compose final image prompt: base prompt + scene.text + stylePrompt.
+   - Call FAL FLUX API with correct model + args.
+   - Receive result with temporary image URL.
+
+3. Download & upload via Supabase:
+   - Download the image (HTTP GET) from FAL's URL.
+   - Upload binary to Supabase storage bucket `aiauto` under:
+     `projects/{projectId}/scenes/{sceneId}/{imageAssetId}.jpg`
+   - Get public URL (Supabase signed or public URL).
+
+4. Persist:
+   - Create ImageAsset row with:
+     - projectId, sceneId
+     - url = Supabase public URL
+     - prompt, model, status="ready"
+
+5. Return ImageAsset to frontend.
+
+Error handling:
+- If FAL API fails → create ImageAsset with status="failed" + error message.
+- If Supabase upload fails → also mark as failed.
+
+Why Supabase?
+- FAL URLs may expire or be inaccessible to KIE.
+- Supabase ensures stable HTTPS URL accessible for later video generation.
+
+3) Google TTS – Audio Generation
+--------------------------------
+Responsible for: converting scene text to speech.
+
+Backend steps:
+1. Frontend calls POST /api/audio/generate with:
+   - sceneId
+   - voiceId
+   - speed (speaking_rate)
+   - other TTS options (pitch, volumeGainDb, etc.)
+
+2. Backend:
+   - Fetch Scene text.
+   - Call Google TTS API with text + voice settings.
+   - Receive audio binary (e.g., MP3/OGG).
+
+3. Upload to Supabase:
+   - Path example:
+     `audio/{projectId}/{sceneId}/{audioClipId}.mp3`
+   - Get public URL.
+
+4. Persist:
+   - Create AudioClip row:
+     - sceneId
+     - url = Supabase public URL
+     - provider, voiceId, speed, durationSec, status="ready"
+
+5. Return AudioClip to frontend.
+
+Batch mode (/api/audio/generate-batch):
+- Iterate scenes in order.
+- Rate-limit or parallelize safely.
+- Update each AudioClip row + status individually.
+
+Error handling:
+- If TTS fails → AudioClip.status="failed" + error text.
+- For batch, continue other scenes even if one fails; show per-scene error in UI.
+
+4) Supabase – Storage & DB
+--------------------------
+Supabase is used for:
+- Persistent storage of:
+  - Audio files
+  - Image files
+  - (Optionally) generated videos that are not hosted elsewhere.
+- Database as defined in data model (Projects, Scenes, etc.).
+
+Storage Folder Conventions (recommended):
+- `projects/{projectId}/scenes/{sceneId}/images/{imageId}.jpg`
+- `projects/{projectId}/scenes/{sceneId}/audio/{audioId}.mp3`
+- `projects/{projectId}/videos/{videoClipId}.mp4`
+
+The DB schema is described in `ai_studio_data_model_and_flows.txt`.
+
+5) KIE AI – Image-To-Video Generation
+-------------------------------------
+Responsible for: creating video clips from one or more image URLs.
+
+Backend steps:
+1. Frontend calls POST /api/video/generate with:
+   - projectId
+   - imageIds[] (or sceneIds to resolve)
+   - options (aspectRatio, duration, motion style, etc.)
+
+2. Backend:
+   - Resolve imageIds to ImageAsset records.
+   - Extract Supabase public URLs (must be accessible by KIE).
+   - Build KIE request payload:
+     - For single image: image_url
+     - For multiple: image_urls array
+     - Add options (duration, HD flag, etc.) as required.
+
+3. Call KIE `createTask` endpoint.
+   - Receive `taskId`.
+
+4. Persist:
+   - Create VideoClip row:
+     - projectId
+     - status = "pending" or "rendering"
+     - externalTaskId = taskId
+   - Return temporary VideoClip object to frontend.
+
+5. Polling:
+   - Background job or scheduled polling calls `recordInfo` with taskId.
+   - When `state == "success"`:
+     - Read `resultJson.resultUrls[0]` (final mp4 URL).
+     - Update VideoClip:
+       - url = resultUrls[0]
+       - status = "ready"
+   - If `state == "fail"` or timeout:
+       - status = "failed"
+       - error = message from KIE.
+
+Frontend behavior:
+- Initially show card with status "대기중" / "렌더링".
+- Once status="ready", play/download become available.
+
+Global Error Handling & Status
+------------------------------
+Each asset table uses:
+- status: pending / ready / failed / rendering
+- error: optional text
+
+Rules:
+- Always set status to "pending" before calling external service.
+- On success, set status="ready" and clear error.
+- On failure, set status="failed" and store error.
+- Frontend reads status to show badges and buttons:
+  - pending/rendering → disable play/download.
+  - failed → show "다시 시도" button.
+
+Sequence Summary (Per Scene)
+----------------------------
+1. Script generation → Scene rows created.
+2. User opens Audio tab → generates TTS:
+   - Scene → Google TTS → Supabase upload → AudioClip(url).
+3. User opens Image tab → generates image:
+   - Scene → FAL → Supabase upload → ImageAsset(url).
+4. User opens Video tab → selects images → video:
+   - ImageAsset.url (Supabase) → KIE createTask → KIE recordInfo → VideoClip.url.
+
+Checklist Before Production
+---------------------------
+- Verify all external calls use timeouts and retries.
+- Confirm Supabase bucket `aiauto` CORS and public access are appropriate for KIE.
+- Confirm FAL and KIE libraries/SDKs (if any) are pinned to stable versions.
+- Log external call errors with enough context to debug.
+- Ensure that deleting a Project is either:
+  - soft-delete only (keep assets), or
+  - triggers a cleanup job for Supabase storage as well (optional).
+
+This document, combined with the architecture, data model and UX flow specs, should be enough for any engineer or Antigravity agent to wire all services together without further explanation.

@@ -154,19 +154,20 @@ export async function POST(request: Request) {
         const { imageUrl, prompt, model, mode, duration, resolution } = await request.json();
 
         // Get API keys from headers (BYOK)
-        const userKieKey = request.headers.get('x-kie-key');
-        const userOpenAiKey = request.headers.get('x-openai-key');
+        // Get API keys from headers (BYOK) or Fallback to Server Env
+        const userKieKey = request.headers.get('x-kie-key') || process.env.KIE_API_KEY;
+        const userOpenAiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY;
 
         if (!userKieKey) {
             return NextResponse.json(
-                { error: '설정에서 KIE API 키를 먼저 입력해주세요.' },
+                { error: 'KIE API Key is missing' },
                 { status: 401 }
             );
         }
 
         if (!userOpenAiKey) {
             return NextResponse.json(
-                { error: '설정에서 OpenAI API 키를 먼저 입력해주세요.' },
+                { error: 'OpenAI API Key is missing' },
                 { status: 401 }
             );
         }

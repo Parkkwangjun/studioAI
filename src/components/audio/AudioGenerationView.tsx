@@ -201,10 +201,8 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     };
 
     const handleGenerateAudio = async (scene: Scene, voiceId?: string) => {
-        if (!googleCredentials) {
-            toast.error('설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.');
-            return;
-        }
+        // Use credentials from store or empty string (server will fallback to env)
+        const credsHeader = googleCredentials ? safeEncode(googleCredentials) : '';
 
         setGeneratingId(scene.id);
         try {
@@ -212,7 +210,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-google-credentials': btoa(unescape(encodeURIComponent(googleCredentials)))
+                    ...(credsHeader ? { 'x-google-credentials': credsHeader } : {})
                 },
                 body: JSON.stringify({
                     text: scene.text,
@@ -247,18 +245,26 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
         toast.success('All audio generated!');
     };
 
-    const handleVoicePreview = async (voice: TTSVoice) => {
-        if (!googleCredentials) {
-            toast.error('설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.');
-            return;
+    // Safe Base64 encoding function for Unicode strings
+    const safeEncode = (str: string) => {
+        try {
+            return btoa(unescape(encodeURIComponent(str)));
+        } catch (e) {
+            console.error('Encoding failed:', e);
+            return '';
         }
+    };
+
+    const handleVoicePreview = async (voice: TTSVoice) => {
+        // Use credentials from store or empty string (server will fallback to env)
+        const credsHeader = googleCredentials ? safeEncode(googleCredentials) : '';
 
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-google-credentials': btoa(unescape(encodeURIComponent(googleCredentials)))
+                    ...(credsHeader ? { 'x-google-credentials': credsHeader } : {})
                 },
                 body: JSON.stringify({
                     text: '안녕하세요. 저는 ' + voice.name + ' 입니다.',

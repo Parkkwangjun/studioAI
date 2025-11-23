@@ -1,0 +1,49 @@
+AI STUDIO APP – OVERVIEW & GLOSSARY
+===================================
+
+Product Vision
+--------------
+AI Studio is a dark-themed web application that automates content creation.
+
+From one high-level idea, the user can:
+- generate a full SCRIPT,
+- turn each scene into TTS AUDIO,
+- generate IMAGES per scene,
+- turn images into short VIDEO clips.
+
+Everything is scene-based: a scene is a single “one-breath” sentence or short paragraph.
+The app is optimized for YouTube shorts, long-form videos, TikTok, Reels, etc.
+
+Core Entities
+-------------
+- Project: one complete piece of content (e.g. 10‑min video, 1‑min short).
+- Scene: smallest text unit within a project, ordered.
+- Script: ordered list of scenes in a project.
+- AudioClip: TTS audio file linked to a scene.
+- ImageAsset: generated image linked to a scene or project.
+- VideoClip: generated video linked to a project (and optionally scenes/images).
+- Library: right-side panel that lists previously generated Scripts / Audio / Images / Videos.
+
+Main Sections (Left Navigation)
+-------------------------------
+1) 스크립트 (Script)
+2) 오디오 (Audio)
+3) 이미지 (Image)
+4) 비디오 (Video)
+5) 설정 (Settings)
+
+High-Level Workflow
+-------------------
+1. User goes to Script tab, enters options + prompt, and generates a script.
+   → System splits result into scenes and creates a Project.
+
+2. User goes to Audio tab, selects the script, and generates TTS per scene
+   (individually or in batch).
+
+3. User goes to Image tab, sees all scenes and generates images per scene.
+
+4. User goes to Video tab, selects images and options, then generates a video clip.
+
+5. Settings tab configures defaults (models, voices, styles, etc.).
+
+This file should be read first to understand the intent of AI Studio before implementing any code.

@@ -1,0 +1,109 @@
+AI STUDIO – DESIGN SYSTEM
+=========================
+
+THEME
+-----
+- Dark UI as default.
+- Primary accent color: purple for main actions.
+- Neutral greys/blues for backgrounds and borders.
+- Ensure contrast for text (aim WCAG AA+).
+
+COLOR TOKENS (examples)
+-----------------------
+bg.app        = #050510
+bg.panel      = #111322
+bg.card       = #151828
+bg.input      = #111322
+border.subtle = #26293a
+border.strong = #3a3d52
+text.main     = #ffffff
+text.muted    = #a0a4c0
+primary       = #7c3aed
+primary.hover = #6d28d9
+danger        = #ef4444
+success       = #22c55e
+warning       = #eab308
+
+TYPOGRAPHY
+----------
+font.family   = system UI / Inter / Pretendard (Korean capable)
+font.size.xs  = 11px
+font.size.sm  = 12px
+font.size.md  = 14px
+font.size.lg  = 16px
+font.weight.reg = 400
+font.weight.med = 500
+font.weight.sem = 600
+
+SPACING & RADIUS
+----------------
+space: 0, 4, 8, 12, 16, 20, 24, 32, 40px
+radius.sm  = 4px
+radius.md  = 8px
+radius.lg  = 12px
+radius.xl  = 16px
+radius.full = 999px
+
+COMPONENT GUIDELINES
+--------------------
+Buttons
+- Variants: primary / secondary / ghost / danger
+- Sizes: sm / md / lg
+- States: default / hover / active / disabled / loading
+- Primary uses purple background with white text.
+
+Inputs
+- Label above, helper text below.
+- Error state: red border + small error message.
+- Focus ring: primary color outline.
+
+Cards
+- Used for scenes, images, videos.
+- Structure: header (meta) + body (content) + footer (actions).
+- Background: bg.card, subtle shadow.
+
+Modals
+- Centered, max width 720–960px.
+- Dark surface with strong border or shadow.
+- Title bar + close icon.
+- Scrollable content; actions fixed at bottom when needed.
+
+Sidebar
+- Narrow vertical bar.
+- Icon + label (tooltip on hover).
+- Active item: purple accent line or background.
+
+Library Panel
+- Right side, fixed width.
+- Compact item rows or mini cards.
+- Scrollable independently.
+
+ICON SYSTEM
+-----------
+- Use single icon set (e.g. Lucide-style line icons).
+- Sizes: 16px (in text/buttons), 20px (nav).
+- Stroke: 1.5px, rounded.
+
+INTERACTION
+-----------
+- Hover: increase brightness / subtle elevation.
+- Focus: visible outline using primary color.
+- Disabled: lower opacity and remove hover feedback.
+- Animations: 150–200ms ease‑out for hover/toggle.
+
+LAYOUT
+------
+- Desktop max width ~1440px.
+- Main content uses 12-column grid with 16–24px gaps.
+- Breakpoints: 640 / 768 / 1024 / 1280 px.
+
+ACCESSIBILITY
+-------------
+- Avoid color-only status indication; also use icon or text.
+- All icon-only buttons must have aria-label.
+- Text size must not be smaller than 12px for body.
+
+Implementation Suggestion
+-------------------------
+- Implement tokens via Tailwind theme extension or CSS variables.
+- Build /components/ui as the canonical design-system component library.
