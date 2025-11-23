@@ -16,40 +16,31 @@ function getClient(googleCredsJson: string) {
 
 /**
  * POST /api/audio/generate
- * Expects JSON body: { text, voiceId?, speed? }
- * Header `x-google-credentials` must contain Base64‑encoded Google Cloud JSON credentials.
+ * Expects JSON body: { text, voiceId?, speed?, googleCredentials }
  */
 export async function POST(request: Request) {
     try {
-        const { text, voiceId, speed } = await request.json();
+        const { text, voiceId, speed, googleCredentials } = await request.json();
 
-        // ----- Validate and decode credentials -----
+        // ----- Validate credentials -----
         let googleCredsJson: string | null = null;
-        const encodedCreds = request.headers.get('x-google-credentials');
 
-        if (encodedCreds) {
-            try {
-                // Decode Base64 safely (compatible with browsers & Node)
-                googleCredsJson = decodeURIComponent(escape(atob(encodedCreds)));
-
-                // Validate JSON format immediately
-                try {
-                    JSON.parse(googleCredsJson);
-                } catch (jsonError) {
-                    console.error('Invalid JSON structure in credentials:', jsonError);
-                    return NextResponse.json({
-                        error: 'Google Credentials 형식이 올바르지 않습니다. 파일 경로가 아닌 JSON 내용 전체를 입력했는지 확인해주세요.'
-                    }, { status: 400 });
-                }
-            } catch (e) {
-                console.error('Failed to decode Google credentials:', e);
-                return NextResponse.json({ error: 'Google Credentials 디코딩 실패' }, { status: 400 });
-            }
+        if (googleCredentials) {
+            googleCredsJson = googleCredentials;
         }
 
-        // Fallback removed to enforce BYOK
         if (!googleCredsJson) {
             return NextResponse.json({ error: '설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.' }, { status: 401 });
+        }
+
+        // Validate JSON format
+        try {
+            JSON.parse(googleCredsJson);
+        } catch (jsonError) {
+            console.error('Invalid JSON structure in credentials:', jsonError);
+            return NextResponse.json({
+                error: 'Google Credentials 형식이 올바르지 않습니다. 파일 경로가 아닌 JSON 내용 전체를 입력했는지 확인해주세요.'
+            }, { status: 400 });
         }
 
         const client = getClient(googleCredsJson);

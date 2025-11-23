@@ -201,21 +201,18 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     };
 
     const handleGenerateAudio = async (scene: Scene, voiceId?: string) => {
-        // Use credentials from store or empty string (server will fallback to env)
-        const credsHeader = googleCredentials ? safeEncode(googleCredentials) : '';
-
         setGeneratingId(scene.id);
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(credsHeader ? { 'x-google-credentials': credsHeader } : {})
                 },
                 body: JSON.stringify({
                     text: scene.text,
                     voiceId: voiceId || selectedVoice.id,
-                    speed: speed
+                    speed: speed,
+                    googleCredentials: googleCredentials // Send in body
                 }),
             });
 
@@ -245,31 +242,18 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
         toast.success('All audio generated!');
     };
 
-    // Safe Base64 encoding function for Unicode strings
-    const safeEncode = (str: string) => {
-        try {
-            return btoa(unescape(encodeURIComponent(str)));
-        } catch (e) {
-            console.error('Encoding failed:', e);
-            return '';
-        }
-    };
-
     const handleVoicePreview = async (voice: TTSVoice) => {
-        // Use credentials from store or empty string (server will fallback to env)
-        const credsHeader = googleCredentials ? safeEncode(googleCredentials) : '';
-
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(credsHeader ? { 'x-google-credentials': credsHeader } : {})
                 },
                 body: JSON.stringify({
                     text: '안녕하세요. 저는 ' + voice.name + ' 입니다.',
                     voiceId: voice.id,
-                    speed: 1.0
+                    speed: 1.0,
+                    googleCredentials: googleCredentials // Send in body
                 }),
             });
 
