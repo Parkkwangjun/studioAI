@@ -35,6 +35,14 @@ export async function GET(request: Request) {
             }
         });
 
+        console.log('KIE Status Response:', response.status, response.statusText);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('KIE Status Error Body:', errorText);
+            throw new Error(`KIE Status API Error: ${response.status} - ${errorText}`);
+        }
+
         console.log('Response status:', response.status);
 
         if (!response.ok) {

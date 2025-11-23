@@ -112,23 +112,51 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <label className="block text-sm font-medium text-white/80">
                             Google Cloud Credentials (JSON)
                         </label>
-                        <textarea
-                            value={localGoogle}
-                            onChange={(e) => setLocalGoogle(e.target.value)}
-                            placeholder='{"type": "service_account", "project_id": "...", ...}'
-                            rows={4}
-                            className={`w-full px-4 py-3 bg-white/5 border rounded-lg text-white placeholder:text-white/30 focus:outline-none font-mono text-xs ${localGoogle && !localGoogle.trim().startsWith('{')
-                                    ? 'border-red-500/50 focus:border-red-500'
-                                    : 'border-white/10 focus:border-blue-500/50'
-                                }`}
-                        />
-                        {localGoogle && !localGoogle.trim().startsWith('{') && (
-                            <p className="text-xs text-red-400 font-bold">
-                                ⚠️ 파일 경로가 아닌, JSON 파일의 내용 전체를 복사해서 붙여넣어야 합니다.
-                            </p>
-                        )}
+                        <div className="flex flex-col gap-2">
+                            <div className="relative">
+                                <input
+                                    type="file"
+                                    accept=".json"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onload = (event) => {
+                                                const content = event.target?.result as string;
+                                                try {
+                                                    // Validate JSON immediately
+                                                    JSON.parse(content);
+                                                    setLocalGoogle(content);
+                                                    toast.success('Google Credentials 파일이 로드되었습니다.');
+                                                } catch (err) {
+                                                    toast.error('올바르지 않은 JSON 파일입니다.');
+                                                }
+                                            };
+                                            reader.readAsText(file);
+                                        }
+                                    }}
+                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                                />
+                            </div>
+
+                            {/* Hidden textarea for manual edit if needed, or just status display */}
+                            {localGoogle && (
+                                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                    <span className="text-xs text-green-400 font-medium">
+                                        인증 키가 로드되었습니다 ({localGoogle.length} bytes)
+                                    </span>
+                                    <button
+                                        onClick={() => setLocalGoogle('')}
+                                        className="ml-auto text-xs text-white/40 hover:text-white"
+                                    >
+                                        삭제
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <p className="text-xs text-white/40">
-                            음성 생성(TTS)에 사용됩니다. JSON 파일 내용 전체를 붙여넣으세요.
+                            다운로드 받은 JSON 키 파일을 직접 업로드하세요. (내용이 자동으로 저장됩니다)
                         </p>
                     </div>
 
