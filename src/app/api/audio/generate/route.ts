@@ -25,7 +25,9 @@ export async function POST(request: Request) {
             );
         }
 
-        const client = getClient(userGoogleCreds);
+        // Decode Base64 credentials
+        const decodedCreds = Buffer.from(userGoogleCreds, 'base64').toString('utf-8');
+        const client = getClient(decodedCreds);
 
         const [response] = await client.synthesizeSpeech({
             input: { text },

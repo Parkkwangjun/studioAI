@@ -212,7 +212,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-google-credentials': googleCredentials
+                    'x-google-credentials': btoa(unescape(encodeURIComponent(googleCredentials)))
                 },
                 body: JSON.stringify({
                     text: scene.text,
@@ -258,7 +258,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-google-credentials': googleCredentials
+                    'x-google-credentials': btoa(unescape(encodeURIComponent(googleCredentials)))
                 },
                 body: JSON.stringify({
                     text: '안녕하세요. 저는 ' + voice.name + ' 입니다.',

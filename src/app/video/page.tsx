@@ -41,7 +41,11 @@ export default function VideoPage() {
         if (taskId && !generatedVideo) {
             const interval = setInterval(async () => {
                 try {
-                    const res = await fetch(`/api/video/status?taskId=${taskId}`);
+                    const res = await fetch(`/api/video/status?taskId=${taskId}`, {
+                        headers: {
+                            'x-kie-key': kieKey || ''
+                        }
+                    });
                     const data = await res.json();
 
                     if (data.status === 'completed') {

@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { uploadAssetFromUrl } from '@/lib/supabase/storage';
 
-const KIE_API_KEY = process.env.KIE_API_KEY;
-
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
+    const userKieKey = request.headers.get('x-kie-key');
 
     if (!taskId) {
         return NextResponse.json({ error: 'Missing taskId' }, { status: 400 });
@@ -14,10 +13,12 @@ export async function GET(request: Request) {
     try {
         console.log('=== Video Status Check ===');
         console.log('Task ID:', taskId);
-        console.log('KIE API Key:', KIE_API_KEY ? 'Present' : 'Missing');
 
-        if (!KIE_API_KEY) {
-            throw new Error('KIE_API_KEY is not configured');
+        if (!userKieKey) {
+            return NextResponse.json(
+                { error: '설정에서 KIE API 키를 먼저 입력해주세요.' },
+                { status: 401 }
+            );
         }
 
         // CORRECT ENDPOINT: /recordInfo not /getTask
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
 
         const response = await fetch(url, {
             headers: {
-                'Authorization': `Bearer ${KIE_API_KEY}`
+                'Authorization': `Bearer ${userKieKey}`
             }
         });
 
@@ -89,7 +90,7 @@ export async function GET(request: Request) {
             message: error instanceof Error ? error.message : 'Unknown error',
             stack: error instanceof Error ? error.stack : undefined,
             taskId,
-            hasApiKey: !!KIE_API_KEY
+            hasApiKey: !!userKieKey
         });
         return NextResponse.json({
             error: 'Failed to check status',
