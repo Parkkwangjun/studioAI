@@ -78,25 +78,25 @@ export default function LoginPage() {
 
             <div className="w-full max-w-md bg-[#1a1a24] rounded-2xl border border-[#2a2a35] p-8 shadow-2xl">
                 <div className="flex flex-col items-center mb-8">
-                    <div className="w-12 h-12 bg-[var(--primary-color)] rounded-xl flex items-center justify-center mb-4">
+                    <div className="w-12 h-12 bg-(--primary-color) rounded-xl flex items-center justify-center mb-4">
                         <Wand2 className="w-7 h-7 text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-white mb-2">AI Studio</h1>
-                    <p className="text-[var(--text-gray)] text-sm">
+                    <p className="text-(--text-gray) text-sm">
                         {isSignUp ? '새로운 계정을 만들어보세요' : '나만의 스튜디오로 입장하세요'}
                     </p>
                 </div>
 
                 <form onSubmit={handleAuth} className="flex flex-col gap-4">
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-[var(--text-gray)] ml-1">이메일</label>
+                        <label className="text-xs font-medium text-(--text-gray) ml-1">이메일</label>
                         <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-gray)]" />
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-gray)" />
                             <input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-[#15151e] border border-[#2a2a35] rounded-lg pl-10 pr-4 py-3 text-white text-sm focus:border-[var(--primary-color)] outline-none transition-colors"
+                                className="w-full bg-[#15151e] border border-[#2a2a35] rounded-lg pl-10 pr-4 py-3 text-white text-sm focus:border-(--primary-color) outline-none transition-colors"
                                 placeholder="name@example.com"
                                 required
                             />
@@ -104,14 +104,14 @@ export default function LoginPage() {
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-xs font-medium text-[var(--text-gray)] ml-1">비밀번호</label>
+                        <label className="text-xs font-medium text-(--text-gray) ml-1">비밀번호</label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-gray)]" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-gray)" />
                             <input
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-[#15151e] border border-[#2a2a35] rounded-lg pl-10 pr-4 py-3 text-white text-sm focus:border-[var(--primary-color)] outline-none transition-colors"
+                                className="w-full bg-[#15151e] border border-[#2a2a35] rounded-lg pl-10 pr-4 py-3 text-white text-sm focus:border-(--primary-color) outline-none transition-colors"
                                 placeholder="••••••••"
                                 required
                                 minLength={6}
@@ -122,7 +122,7 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full bg-[var(--primary-color)] hover:bg-[#4a4ddb] text-white py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-(--primary-color) hover:bg-[#4a4ddb] text-white py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -137,7 +137,7 @@ export default function LoginPage() {
                         <div className="w-full border-t border-[#2a2a35]"></div>
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-[#1a1a24] px-2 text-[var(--text-gray)]">Or continue with</span>
+                        <span className="bg-[#1a1a24] px-2 text-(--text-gray)">Or continue with</span>
                     </div>
                 </div>
 
@@ -178,7 +178,7 @@ export default function LoginPage() {
                 <div className="mt-6 text-center">
                     <button
                         onClick={() => setIsSignUp(!isSignUp)}
-                        className="text-xs text-[var(--text-gray)] hover:text-white transition-colors"
+                        className="text-xs text-(--text-gray) hover:text-white transition-colors"
                     >
                         {isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입'}
                     </button>

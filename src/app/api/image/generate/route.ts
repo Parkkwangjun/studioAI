@@ -7,8 +7,8 @@ async function optimizePromptForFlux(koreanPrompt: string, openaiKey: string): P
     const openai = new OpenAI({ apiKey: openaiKey });
 
     try {
-        console.log('🎨 Optimizing image prompt using JSON Style Guide...');
-        console.log('Original Prompt (KR):', koreanPrompt);
+
+
 
         const systemPrompt = `You are an expert AI image generation prompt engineer using JSON Style Guides for FLUX models.
 
@@ -54,7 +54,7 @@ Return ONLY the optimized English prompt as a single flowing paragraph. Do NOT o
         });
 
         const optimizedPrompt = completion.choices[0].message.content?.trim() || koreanPrompt;
-        console.log('Optimized Prompt (EN):', optimizedPrompt);
+
         return optimizedPrompt;
     } catch (error) {
         console.error('❌ Prompt optimization failed:', error);
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
         // Get API keys from headers (BYOK)
         const userFalKey = request.headers.get('x-fal-key');
         const userOpenAiKey = request.headers.get('x-openai-key');
+        const userKieKey = request.headers.get('x-kie-key');
 
         if (!userFalKey) {
             return NextResponse.json({ error: '설정에서 FAL API 키를 먼저 입력해주세요.' }, { status: 401 });
@@ -81,10 +82,6 @@ export async function POST(request: Request) {
         // Configure Fal.ai client with user's key
         fal.config({ credentials: userFalKey });
 
-        console.log('\n=== IMAGE GENERATION REQUEST START ===');
-        console.log('Original Prompt:', prompt);
-        console.log('Model:', model);
-
         if (!prompt || prompt.trim() === '') {
             return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
         }
@@ -92,54 +89,98 @@ export async function POST(request: Request) {
         // Optimize using JSON Style Guide methodology
         const optimizedEnglishPrompt = await optimizePromptForFlux(prompt.trim(), userOpenAiKey);
 
-        // Determine model ID and parameters based on selection
-        const modelId = model === 'schnell' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';
-        const numInferenceSteps = model === 'schnell' ? 4 : 28;
+        let imageUrl = null;
+        let seed = null;
+        let generationTime = null;
+        let requestId = null;
+        let modelId = model;
 
-        const falInput = {
-            prompt: optimizedEnglishPrompt,
-            image_size: imageSize || "landscape_16_9",
-            guidance_scale: guidanceScale || 3.5,
-            num_inference_steps: numInferenceSteps,
-            enable_safety_checker: true
-        };
+        if (model === 'nanobanana') {
+            if (!userKieKey) {
+                return NextResponse.json({ error: '설정에서 KIE API 키를 먼저 입력해주세요.' }, { status: 401 });
+            }
 
-        console.log('Calling Fal.ai API:', modelId);
-        const startTime = Date.now();
-
-        const result = await fal.subscribe(modelId, {
-            input: falInput,
-            logs: true,
-            onQueueUpdate: (update) => {
-                if (update.status === 'IN_PROGRESS') {
-                    console.log('📊 Progress:', update.logs.map((log) => log.message).join('\n'));
+            const payload = {
+                model: "nano-banana-pro",
+                input: {
+                    prompt: optimizedEnglishPrompt,
+                    width: imageSize === "square_hd" ? 1024 : (imageSize === "portrait_16_9" ? 576 : 1024),
+                    height: imageSize === "square_hd" ? 1024 : (imageSize === "portrait_16_9" ? 1024 : 576),
+                    num_inference_steps: 30
                 }
-            },
-        });
+            };
 
-        const generationTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            const response = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${userKieKey}`
+                },
+                body: JSON.stringify(payload)
+            });
 
-        // Fix for TypeScript error: define interface for result
-        interface FalResult {
-            images: Array<{ url: string }>;
-            seed: number;
-            requestId: string;
+            if (!response.ok) throw new Error('Kie.ai API failed');
+            const apiResponse = await response.json();
+            if (apiResponse.code !== 200) throw new Error(apiResponse.msg);
+
+            const taskId = apiResponse.data.taskId;
+
+            // Return taskId immediately for client-side polling
+            return NextResponse.json({
+                status: 'pending',
+                taskId,
+                originalPrompt: prompt,
+                optimizedPrompt: optimizedEnglishPrompt,
+                model: modelId
+            });
+
+        } else {
+            // FAL.ai Logic
+            modelId = model === 'schnell' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';
+            const numInferenceSteps = model === 'schnell' ? 4 : 28;
+
+            const falInput = {
+                prompt: optimizedEnglishPrompt,
+                image_size: imageSize || "landscape_16_9",
+                guidance_scale: guidanceScale || 3.5,
+                num_inference_steps: numInferenceSteps,
+                enable_safety_checker: true
+            };
+
+            const startTime = Date.now();
+
+            const result = await fal.subscribe(modelId, {
+                input: falInput,
+                logs: true,
+                onQueueUpdate: (update) => {
+                    // Logs removed
+                },
+            });
+
+            generationTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
+            interface FalResult {
+                images: Array<{ url: string }>;
+                seed: number;
+                requestId: string;
+            }
+            const data = result as unknown as FalResult;
+
+            if (!data.images || data.images.length === 0) {
+                throw new Error('No images generated');
+            }
+
+            imageUrl = data.images[0].url;
+            seed = data.seed;
+            requestId = data.requestId;
         }
-        const data = result as unknown as FalResult;
-
-        if (!data.images || data.images.length === 0) {
-            throw new Error('No images generated');
-        }
-
-        let imageUrl = data.images[0].url;
-        const seed = data.seed;
 
         // Upload to Supabase Storage for permanence
         try {
-            console.log('💾 Uploading image to Supabase Storage...');
-            const permanentUrl = await uploadAssetFromUrl(imageUrl, 'images');
-            console.log('✅ Upload complete:', permanentUrl);
-            imageUrl = permanentUrl;
+            if (imageUrl) {
+                const permanentUrl = await uploadAssetFromUrl(imageUrl, 'images');
+                imageUrl = permanentUrl;
+            }
         } catch (uploadError) {
             console.error('⚠️ Storage upload failed, using temporary URL:', uploadError);
         }
@@ -148,9 +189,9 @@ export async function POST(request: Request) {
             imageUrl,
             originalPrompt: prompt,
             optimizedPrompt: optimizedEnglishPrompt,
-            seed: seed,
-            generationTime: generationTime,
-            requestId: data.requestId,
+            seed,
+            generationTime,
+            requestId,
             model: modelId
         });
 

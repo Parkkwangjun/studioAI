@@ -1,13 +1,24 @@
 import { NextResponse } from 'next/server';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
+import { getVoiceById } from '@/lib/tts-voices';
+
+let cachedClient: TextToSpeechClient | null = null;
+let cachedCreds: string | null = null;
 
 /**
- * Create a TextToSpeech client from Base64‑encoded Google credentials.
+ * Create or retrieve a cached TextToSpeech client.
+ * Recreates the client only if credentials change.
  */
 function getClient(googleCredsJson: string) {
+    if (cachedClient && cachedCreds === googleCredsJson) {
+        return cachedClient;
+    }
+
     try {
         const credentials = JSON.parse(googleCredsJson);
-        return new TextToSpeechClient({ credentials });
+        cachedClient = new TextToSpeechClient({ credentials });
+        cachedCreds = googleCredsJson;
+        return cachedClient;
     } catch (error) {
         console.error('Failed to parse Google credentials:', error);
         throw new Error('Invalid Google credentials format');
@@ -16,96 +27,157 @@ function getClient(googleCredsJson: string) {
 
 /**
  * POST /api/audio/generate
- * Expects JSON body: { text, voiceId?, speed?, googleCredentials }
+ * Expects JSON body: { text, voiceId?, speed?, pitch?, googleCredentials }
  */
 export async function POST(request: Request) {
     try {
-        const { text, voiceId, speed, googleCredentials } = await request.json();
+        const { text, voiceId, speed, pitch, googleCredentials } = await request.json();
+        const userKieKey = request.headers.get('x-kie-key');
 
-        // ----- Validate credentials -----
-        let googleCredsJson: string | null = null;
+        // Check voice provider
+        const selectedVoice = voiceId ? getVoiceById(voiceId) : null;
+        const provider = selectedVoice?.provider || 'google'; // Default to google if not found (fallback)
 
-        if (googleCredentials) {
-            googleCredsJson = googleCredentials;
-        }
+        let audioBuffer: Buffer;
 
-        if (!googleCredsJson) {
-            return NextResponse.json({ error: '설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.' }, { status: 401 });
-        }
+        if (provider === 'elevenlabs') {
+            // ----- ElevenLabs Logic via Kie.ai -----
+            if (!userKieKey) {
+                return NextResponse.json({ error: '설정에서 KIE API 키를 먼저 입력해주세요.' }, { status: 401 });
+            }
 
-        // Validate JSON format
-        try {
-            JSON.parse(googleCredsJson);
-        } catch (jsonError) {
-            console.error('Invalid JSON structure in credentials:', jsonError);
-            return NextResponse.json({
-                error: 'Google Credentials 형식이 올바르지 않습니다. 파일 경로가 아닌 JSON 내용 전체를 입력했는지 확인해주세요.'
-            }, { status: 400 });
-        }
+            const modelId = selectedVoice?.model || 'eleven_turbo_v2_5';
 
-        const client = getClient(googleCredsJson);
+            const payload = {
+                model: "elevenlabs/text-to-speech-turbo-2-5",
+                input: {
+                    text,
+                    voice_id: voiceId,
+                    model_id: modelId,
+                    voice_settings: {
+                        stability: 0.5,
+                        similarity_boost: 0.75
+                    }
+                }
+            };
 
-        // ----- Call Google TTS -----
-        const [response] = await client.synthesizeSpeech({
-            input: { text },
-            voice: {
-                languageCode: 'ko-KR',
-                name: voiceId || 'ko-KR-Neural2-A',
-            },
-            audioConfig: {
-                audioEncoding: 'MP3',
-                speakingRate: speed || 1.0,
-            },
-        });
+            const response = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${userKieKey}`
+                },
+                body: JSON.stringify(payload)
+            });
 
-        const audioContent = response.audioContent;
-        if (!audioContent) {
-            throw new Error('No audio content returned');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Kie.ai API failed: ${errorText}`);
+            }
+
+            const apiResponse = await response.json();
+
+            if (apiResponse.code !== 200) {
+                throw new Error(`Kie.ai error: ${apiResponse.msg}`);
+            }
+
+            // Polling for completion
+            const taskId = apiResponse.data.taskId;
+            let audioUrl = null;
+
+            // Simple polling (max 30 seconds)
+            // Adaptive polling
+            let attempts = 0;
+            const maxAttempts = 30; // 30 attempts
+
+            while (attempts < maxAttempts) {
+                attempts++;
+
+                // Adaptive delay: fast at first, then slower
+                const delay = attempts <= 5 ? 1000 : attempts <= 10 ? 2000 : 4000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+
+                const statusRes = await fetch(`https://api.kie.ai/api/v1/jobs/getTask?taskId=${taskId}`, {
+                    headers: { 'Authorization': `Bearer ${userKieKey}` }
+                });
+
+                if (!statusRes.ok) continue;
+
+                const statusData = await statusRes.json();
+
+                if (statusData.data?.status === 'SUCCESS') {
+                    audioUrl = statusData.data.result.audio_url || statusData.data.result.url;
+                    break;
+                } else if (statusData.data?.status === 'FAILED') {
+                    throw new Error(`Task failed: ${statusData.data.failMsg || 'Unknown error'}`);
+                }
+            }
+
+            if (!audioUrl) throw new Error('Timeout waiting for audio generation');
+
+            // Fetch the audio content from the URL
+            const audioRes = await fetch(audioUrl);
+            const arrayBuffer = await audioRes.arrayBuffer();
+            audioBuffer = Buffer.from(arrayBuffer);
+
+        } else {
+            // ----- Google Cloud TTS Logic -----
+
+            // Validate credentials
+            let googleCredsJson: string | null = null;
+            if (googleCredentials) {
+                googleCredsJson = googleCredentials;
+            }
+
+            if (!googleCredsJson) {
+                return NextResponse.json({ error: '설정에서 Google Cloud 인증 정보를 먼저 입력해주세요.' }, { status: 401 });
+            }
+
+            try {
+                JSON.parse(googleCredsJson);
+            } catch (jsonError) {
+                console.error('Invalid JSON structure in credentials:', jsonError);
+                return NextResponse.json({
+                    error: 'Google Credentials 형식이 올바르지 않습니다. 파일 경로가 아닌 JSON 내용 전체를 입력했는지 확인해주세요.'
+                }, { status: 400 });
+            }
+
+            const client = getClient(googleCredsJson);
+
+            const [response] = await client.synthesizeSpeech({
+                input: { text },
+                voice: {
+                    languageCode: 'ko-KR',
+                    name: voiceId || 'ko-KR-Neural2-A',
+                },
+                audioConfig: {
+                    audioEncoding: 'MP3',
+                    speakingRate: speed || 1.0,
+                    pitch: pitch || 0,
+                },
+            });
+
+            const audioContent = response.audioContent;
+            if (!audioContent) {
+                throw new Error('No audio content returned');
+            }
+
+            audioBuffer = Buffer.from(audioContent as Uint8Array);
         }
 
         // ----- Convert to base64 data URL -----
-        const buffer = Buffer.from(audioContent as Uint8Array);
-        const base64Audio = buffer.toString('base64');
+        const base64Audio = audioBuffer.toString('base64');
         let audioUrl = `data:audio/mp3;base64,${base64Audio}`;
 
-        // ----- Optional: Upload to Supabase for persistence -----
-        try {
-            console.log('💾 Uploading audio to Supabase Storage...');
-            const { createClient } = await import('@/lib/supabase/server');
-            const { cookies } = await import('next/headers');
-            const { v4: uuidv4 } = await import('uuid');
+        // ----- Return Base64 immediately for fast playback -----
+        // The client will handle saving to Supabase in the background via /api/assets/save
 
-            const cookieStore = await cookies();
-            const supabase = createClient(cookieStore);
-            const { data: { user } } = await supabase.auth.getUser();
-
-            if (user) {
-                const filename = `${uuidv4()}.mp3`;
-                const path = `${user.id}/audio/${filename}`;
-                const { error } = await supabase.storage
-                    .from('assets')
-                    .upload(path, buffer, {
-                        contentType: 'audio/mpeg',
-                        upsert: false,
-                    });
-                if (!error) {
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('assets')
-                        .getPublicUrl(path);
-                    audioUrl = publicUrl;
-                    console.log('✅ Upload complete:', audioUrl);
-                } else {
-                    throw error;
-                }
-            }
-        } catch (uploadError) {
-            console.error('⚠️ Storage upload failed, using base64 fallback:', uploadError);
-        }
 
         return NextResponse.json({
             audioUrl,
             message: 'Audio generated successfully',
         });
+
     } catch (error) {
         console.error('Audio generation error:', error);
         return NextResponse.json(

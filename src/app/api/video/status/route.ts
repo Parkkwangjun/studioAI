@@ -15,8 +15,8 @@ export async function GET(request: Request) {
     }
 
     try {
-        console.log('=== Video Status Check ===');
-        console.log('Task ID:', taskId);
+
+
 
         if (!userKieKey) {
             return NextResponse.json(
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         }
 
         const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`;
-        console.log('Requesting KIE Status:', url);
+
 
         const response = await fetch(url, {
             headers: {
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
             }
         });
 
-        console.log('KIE Status Response:', response.status, response.statusText);
+
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
             throw new Error(`KIE Status API Error: ${response.status} - ${errorText}`);
         }
 
-        console.log('Response status:', response.status);
+
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -52,30 +52,46 @@ export async function GET(request: Request) {
         }
 
         const apiResponse = await response.json();
-        console.log('KIE API Response:', JSON.stringify(apiResponse, null, 2));
+
 
         // KIE API response structure: { code: 200, msg: "success", data: { state, resultJson, ... } }
         if (apiResponse.code !== 200) {
+            // If code is not 200, it might be a pending state or an error, but check msg
+            console.warn('KIE API Code not 200:', apiResponse);
+            if (apiResponse.msg === 'recordInfo is null') {
+                // This usually means the task ID is invalid or not found yet. 
+                // We can return 'pending' or 'failed' depending on how long it's been.
+                // For now, let's return pending to avoid breaking the client loop immediately, 
+                // or failed if we want to stop. Given the user's report of infinite loop, 
+                // maybe returning 'failed' with a specific error is better if it persists.
+                // But if it's just slow propagation, pending is safer. 
+                // However, "recordInfo is null" usually means it doesn't exist.
+                return NextResponse.json({ status: 'failed', error: 'Task not found (recordInfo is null)' });
+            }
             throw new Error(`KIE API error: ${apiResponse.msg}`);
         }
 
         const data = apiResponse.data;
+        if (!data) {
+            return NextResponse.json({ status: 'failed', error: 'No data received from KIE' });
+        }
+
         const state = data.state; // "waiting", "success", "fail"
 
-        console.log('Task state:', state);
+
 
         if (state === 'success') {
             // Parse resultJson to get video URL
             const resultJson = JSON.parse(data.resultJson);
             let videoUrl = resultJson.resultUrls?.[0];
 
-            console.log('Video URL:', videoUrl);
+
 
             // Upload to Supabase Storage for permanence
             try {
-                console.log('💾 Uploading video to Supabase Storage...');
+
                 const permanentUrl = await uploadAssetFromUrl(videoUrl, 'videos');
-                console.log('✅ Upload complete:', permanentUrl);
+
                 videoUrl = permanentUrl;
             } catch (uploadError) {
                 console.error('⚠️ Storage upload failed, using temporary URL:', uploadError);

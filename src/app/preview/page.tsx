@@ -156,7 +156,7 @@ export default function PreviewPage() {
             </div>
 
             {/* Controls & Timeline */}
-            <div className="h-48 bg-[var(--bg-sidebar)] border-t border-[#2a2a35] flex flex-col">
+            <div className="h-48 bg-(--bg-sidebar) border-t border-[#2a2a35] flex flex-col">
 
                 {/* Playback Controls */}
                 <div className="h-14 flex items-center justify-center gap-4 border-b border-[#2a2a35]">
@@ -168,7 +168,7 @@ export default function PreviewPage() {
                     </button>
                     <button
                         onClick={togglePlay}
-                        className="w-10 h-10 rounded-full bg-[var(--primary-color)] hover:bg-[#4a4ddb] flex items-center justify-center text-white transition-transform hover:scale-105"
+                        className="w-10 h-10 rounded-full bg-(--primary-color) hover:bg-[#4a4ddb] flex items-center justify-center text-white transition-transform hover:scale-105"
                     >
                         {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                     </button>
@@ -190,8 +190,8 @@ export default function PreviewPage() {
                                 setIsPlaying(false);
                             }}
                             className={`relative h-20 aspect-video rounded-md overflow-hidden cursor-pointer border-2 transition-all shrink-0 ${index === currentIndex
-                                    ? 'border-[var(--primary-color)] ring-2 ring-[var(--primary-color)]/30 scale-105'
-                                    : 'border-transparent opacity-60 hover:opacity-100'
+                                ? 'border-[var(--primary-color)] ring-2 ring-[var(--primary-color)]/30 scale-105'
+                                : 'border-transparent opacity-60 hover:opacity-100'
                                 }`}
                         >
                             {scene.imageUrl ? (

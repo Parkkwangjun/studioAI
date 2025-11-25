@@ -11,7 +11,7 @@ export default function AudioPage() {
     const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'input' | 'generation'>('input');
 
-    const { currentProject, setProject } = useProjectStore();
+    const { currentProject, setProject, updateScenes, createProject } = useProjectStore();
 
     useEffect(() => {
         if (currentProject && currentProject.scenes.length > 0) {
@@ -24,22 +24,22 @@ export default function AudioPage() {
         setIsSplitModalOpen(true);
     };
 
-    const handleConfirmSplit = () => {
+    const handleConfirmSplit = async () => {
         const newScenes = scriptText.split('\n\n').filter(Boolean).map((text, i) => ({
             id: i + 1,
             text: text.trim()
         }));
 
-        setProject({
-            id: 'temp-audio-project',
-            title: 'Audio Project',
-            description: 'Temporary audio project',
-            type: 'audio',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            thumbnail: undefined,
-            scenes: newScenes
-        });
+        if (currentProject) {
+            updateScenes(newScenes);
+        } else {
+            await createProject({
+                title: 'Audio Project',
+                description: scriptText.substring(0, 50) + '...',
+                type: 'audio',
+            });
+            updateScenes(newScenes);
+        }
 
         setIsSplitModalOpen(false);
         setViewMode('generation');
@@ -55,55 +55,51 @@ export default function AudioPage() {
             {viewMode === 'input' ? (
                 <div className="grid grid-cols-3 gap-5 h-full">
                     {/* Left Column: Script Input */}
-                    <section className="col-span-2 bg-[var(--bg-card)] rounded-xl p-5 border border-[var(--border-color)] flex flex-col">
+                    <section className="col-span-2 bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex flex-col">
                         <div className="flex justify-between items-center mb-[15px]">
                             <h3 className="text-[0.9rem] font-semibold flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-[var(--primary-color)]" />
+                                <FileText className="w-4 h-4 text-(--primary-color)" />
                                 스크립트 입력
                             </h3>
-                            <button className="text-[0.8rem] text-[var(--text-gray)] hover:text-white transition-colors">
-                                불러오기
+                            <button
+                                onClick={handleAnalyze}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-(--primary-color) text-white text-sm font-medium hover:bg-[#4a4ddb] transition-colors"
+                            >
+                                <Split className="w-4 h-4" />
+                                분석 및 분리 시작
                             </button>
                         </div>
                         <textarea
-                            className="flex-1 w-full bg-[#15151e] border border-[var(--border-color)] rounded-lg p-4 text-white resize-none outline-none focus:border-[var(--primary-color)] transition-colors leading-relaxed"
-                            placeholder="오디오로 변환할 스크립트를 입력하거나 붙여넣으세요..."
+                            className="flex-1 bg-[#16161d] border border-(--border-color) rounded-lg p-4 text-white placeholder-gray-500 outline-none focus:border-(--primary-color) resize-none transition-colors leading-relaxed"
+                            placeholder="스크립트를 입력하세요. (엔터 두 번으로 장면을 구분합니다)"
                             value={scriptText}
                             onChange={(e) => setScriptText(e.target.value)}
-                        ></textarea>
+                        />
                     </section>
 
-                    {/* Right Column: Settings & Actions */}
-                    <section className="col-span-1 flex flex-col gap-5">
-                        <div className="bg-[var(--bg-card)] rounded-xl p-5 border border-[var(--border-color)]">
-                            <h3 className="text-[0.9rem] font-semibold mb-[15px]">설정</h3>
-                            <div className="flex flex-col gap-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-[0.8rem] text-[var(--text-gray)]">기본 보이스</label>
-                                    <select className="bg-[#15151e] border border-[var(--border-color)] rounded-md p-2.5 text-white outline-none focus:border-[var(--primary-color)] text-[0.9rem]">
-                                        <option>Google TTS - Chirp 3 HD (Korean)</option>
-                                        <option>Google TTS - Neural2 (English)</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-[var(--bg-card)] rounded-xl p-5 border border-[var(--border-color)] flex-1 flex flex-col justify-center items-center text-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-[var(--bg-input)] flex items-center justify-center mb-2">
-                                <Split className="w-6 h-6 text-[var(--primary-color)]" />
-                            </div>
-                            <div>
-                                <h4 className="font-semibold mb-1">장면 분리하기</h4>
-                                <p className="text-[0.8rem] text-[var(--text-gray)]">
-                                    AI가 스크립트를 분석하여<br />최적의 장면 단위로 분리합니다.
+                    {/* Right Column: Guide */}
+                    <section className="col-span-1 bg-(--bg-card) rounded-xl p-5 border border-(--border-color)">
+                        <h3 className="text-[0.9rem] font-semibold mb-4">가이드</h3>
+                        <div className="text-sm text-(--text-gray) space-y-4">
+                            <p>
+                                1. 스크립트를 입력하거나 붙여넣으세요.
+                            </p>
+                            <p>
+                                2. 각 장면은 <strong>빈 줄(엔터 두 번)</strong>로 구분됩니다.
+                            </p>
+                            <p>
+                                3. '분석 및 분리 시작' 버튼을 눌러 AI가 장면을 자동으로 나누도록 하세요.
+                            </p>
+                            <div className="bg-[#16161d] p-3 rounded-lg border border-(--border-color) mt-4">
+                                <p className="text-xs text-gray-400 mb-2">예시:</p>
+                                <p className="text-xs text-gray-300">
+                                    안녕하세요, 반갑습니다.<br />
+                                    오늘의 뉴스를 전해드립니다.<br />
+                                    <br />
+                                    첫 번째 소식입니다.<br />
+                                    날씨가 매우 맑습니다.
                                 </p>
                             </div>
-                            <button
-                                onClick={handleAnalyze}
-                                className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-semibold hover:bg-[#4a4ddb] transition-colors mt-2"
-                            >
-                                분석 및 분리 시작
-                            </button>
                         </div>
                     </section>
                 </div>

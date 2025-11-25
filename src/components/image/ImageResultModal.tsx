@@ -26,7 +26,7 @@ export function ImageResultModal({ isOpen, onClose, imageUrl }: ImageResultModal
                             <Share2 className="w-4 h-4" />
                             공유
                         </button>
-                        <button className="px-4 py-2 rounded-md bg-[var(--primary-color)] text-white hover:bg-[#4a4ddb] transition-colors text-sm flex items-center gap-2 font-medium">
+                        <button className="px-4 py-2 rounded-md bg-(--primary-color) text-white hover:bg-[#4a4ddb] transition-colors text-sm flex items-center gap-2 font-medium">
                             <Download className="w-4 h-4" />
                             다운로드
                         </button>

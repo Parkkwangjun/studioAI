@@ -1,10 +1,11 @@
 'use client';
 
-import { MessageSquare, Upload, Wand2, FileText, Download, FileInput } from 'lucide-react';
+import { MessageSquare, Upload, Wand2, FileText, Download } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { ScriptResultModal } from '@/components/script/ScriptResultModal';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { MagicPromptButton } from '@/components/common/MagicPromptButton';
 
 interface ScriptSettings {
     target: string;
@@ -104,23 +105,29 @@ export default function ScriptPage() {
 
             const data = await response.json();
 
+            interface ScriptScene {
+                text: string;
+            }
+
             // Format script for display
-            const scriptText = data.script.map((s: any, i: number) =>
+            const scriptText = data.script.map((s: ScriptScene, i: number) =>
                 `Scene ${i + 1}:\n${s.text}`
             ).join('\n\n');
 
             setGeneratedScript(scriptText);
 
-            // Create new project and save to Supabase
-            await createProject({
-                title: settings.type || 'New Script Project',
-                description: `Generated on ${new Date().toLocaleDateString()}`,
-                type: 'script',
-                thumbnail: undefined
-            });
+            // Create new project only if not exists
+            if (!useProjectStore.getState().currentProject) {
+                await createProject({
+                    title: settings.type || 'New Script Project',
+                    description: `Generated on ${new Date().toLocaleDateString()}`,
+                    type: 'script',
+                    thumbnail: undefined
+                });
+            }
 
             // Update scenes
-            const newScenes = data.script.map((s: any, i: number) => ({
+            const newScenes = data.script.map((s: ScriptScene, i: number) => ({
                 id: i + 1,
                 text: s.text
             }));
@@ -161,14 +168,14 @@ export default function ScriptPage() {
                 </div>
                 <button
                     onClick={handleExportPrompt}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border-color)] text-[var(--text-gray)] hover:text-white hover:border-white transition-colors text-sm"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-(--border-color) text-(--text-gray) hover:text-white hover:border-white transition-colors text-sm"
                 >
                     <Download className="w-4 h-4" />
                     프롬프트 내보내기
                 </button>
             </header>
 
-            <section className="bg-[var(--bg-card)] rounded-xl p-5 border border-[var(--border-color)]">
+            <section className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color)">
                 <h3 className="text-[0.9rem] font-semibold mb-[15px]">맞춤 설정</h3>
                 <div className="grid grid-cols-3 gap-[15px_20px]">
                     {[
@@ -180,23 +187,23 @@ export default function ScriptPage() {
                         { key: 'type', label: '스크립트 타입', placeholder: 'ex) 교육, 엔터테인먼트, 광고' }
                     ].map(({ key, label, placeholder }) => (
                         <div key={key} className="flex flex-col gap-2">
-                            <label className="text-[0.8rem] text-[var(--text-gray)]">{label}</label>
+                            <label className="text-[0.8rem] text-(--text-gray)">{label}</label>
                             <input
                                 type="text"
                                 placeholder={placeholder}
                                 value={settings[key as keyof ScriptSettings]}
                                 onChange={(e) => handleSettingChange(key as keyof ScriptSettings, e.target.value)}
-                                className="bg-transparent border border-[var(--border-color)] rounded-md p-2.5 text-white text-sm outline-none focus:border-[var(--primary-color)] transition-colors placeholder:text-[var(--text-gray)]"
+                                className="bg-transparent border border-(--border-color) rounded-md p-2.5 text-white text-sm outline-none focus:border-(--primary-color) transition-colors placeholder:text-(--text-gray)"
                             />
                         </div>
                     ))}
                 </div>
             </section>
 
-            <section className="bg-[var(--bg-card)] rounded-xl p-5 border border-[var(--border-color)] flex-1 flex flex-col">
+            <section className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex-1 flex flex-col">
                 <div className="flex justify-between items-center mb-[15px]">
                     <h3 className="text-[0.9rem] font-semibold">프롬프트</h3>
-                    <div className="flex items-center gap-2.5 text-[0.85rem] text-[var(--text-gray)]">
+                    <div className="flex items-center gap-2.5 text-[0.85rem] text-(--text-gray)">
                         <span>GPT 지침 업로드</span>
                         <input
                             ref={fileInputRef}
@@ -207,53 +214,64 @@ export default function ScriptPage() {
                         />
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="bg-transparent border border-[var(--border-color)] text-[var(--text-gray)] px-2.5 py-1 rounded text-[0.75rem] hover:text-white hover:border-white transition-colors flex items-center gap-1"
+                            className="bg-transparent border border-(--border-color) text-(--text-gray) px-2.5 py-1 rounded text-[0.75rem] hover:text-white hover:border-white transition-colors flex items-center gap-1"
                         >
                             <Upload className="w-3 h-3" /> Upload
                         </button>
                     </div>
                 </div>
+                <div className="flex justify-between items-center mb-2">
+                    <label className="text-[0.9rem] font-semibold text-white flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4" />
+                        주제 / 아이디어
+                    </label>
+                    <MagicPromptButton
+                        prompt={prompt}
+                        onPromptChange={setPrompt}
+                        type="script"
+                    />
+                </div>
                 <textarea
-                    placeholder="내용을 입력하세요..."
-                    className="w-full flex-1 bg-transparent border border-[var(--border-color)] rounded-lg p-[15px] text-white resize-none outline-none min-h-[150px] focus:border-[var(--primary-color)] transition-colors"
+                    className="w-full h-[150px] bg-[#16161d] border border-(--border-color) rounded-lg p-4 text-white placeholder-gray-500 outline-none focus:border-(--primary-color) resize-none transition-colors"
+                    placeholder="스크립트의 주제나 아이디어를 자유롭게 적어주세요..."
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                ></textarea>
-            </section>
-
-            <div className="flex justify-between mt-2.5">
-                <input
-                    ref={templateInputRef}
-                    type="file"
-                    accept=".txt"
-                    onChange={handleTemplateImport}
-                    className="hidden"
                 />
-                <button
-                    onClick={() => templateInputRef.current?.click()}
-                    className="bg-transparent border border-white text-white px-5 py-2.5 rounded-md text-[0.9rem] hover:bg-white/10 transition-colors flex items-center gap-2"
-                >
-                    <FileText className="w-4 h-4" />
-                    파일 가져오기 (.txt)
-                </button>
-                <button
-                    onClick={handleGenerate}
-                    disabled={isGenerating}
-                    className="bg-[var(--primary-color)] border-none text-white px-6 py-2.5 rounded-md font-semibold text-[0.9rem] hover:bg-[#4a4ddb] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isGenerating ? (
-                        <>
-                            <Wand2 className="w-4 h-4 animate-spin" />
-                            생성 중...
-                        </>
-                    ) : (
-                        <>
-                            <Wand2 className="w-4 h-4" />
-                            스크립트 생성
-                        </>
-                    )}
-                </button>
-            </div>
+
+                <div className="flex justify-between mt-2.5">
+                    <input
+                        ref={templateInputRef}
+                        type="file"
+                        accept=".txt"
+                        onChange={handleTemplateImport}
+                        className="hidden"
+                    />
+                    <button
+                        onClick={() => templateInputRef.current?.click()}
+                        className="bg-transparent border border-white text-white px-5 py-2.5 rounded-md text-[0.9rem] hover:bg-white/10 transition-colors flex items-center gap-2"
+                    >
+                        <FileText className="w-4 h-4" />
+                        파일 가져오기 (.txt)
+                    </button>
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        className="bg-(--primary-color) border-none text-white px-6 py-2.5 rounded-md font-semibold text-[0.9rem] hover:bg-[#4a4ddb] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <Wand2 className="w-4 h-4 animate-spin" />
+                                생성 중...
+                            </>
+                        ) : (
+                            <>
+                                <Wand2 className="w-4 h-4" />
+                                스크립트 생성
+                            </>
+                        )}
+                    </button>
+                </div>
+            </section>
 
             <ScriptResultModal
                 isOpen={isModalOpen}

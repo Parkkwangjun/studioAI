@@ -1,15 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  /* AI Studio Design System Tokens */
-  --bg-dark: #181820;
-  --bg-sidebar: #15151e;
-  --bg-card: #21212b;
-  --bg-input: #2b2b36;
-  --primary-color: #5b5ef5;
-  --text-white: #ffffff;
-  --text-gray: #a0a0b0;
-  --border-color: #383845;
+  /* Deevid.ai Inspired Design System Tokens */
+  --bg-dark: #121212;
+  /* Deep Dark Background */
+  --bg-sidebar: #0a0a0a;
+  /* Slightly darker sidebar */
+  --bg-card: #1E1E1E;
+  /* Card Surface */
+  --bg-input: #27272a;
+  /* Input Background */
+  --bg-hover: #2d2d30;
+  /* Hover State */
+
+  --primary-color: #3B82F6;
+  /* Bright Blue */
+  --primary-hover: #2563EB;
+
+  --text-white: #F3F4F6;
+  /* Primary Text (Off-white) */
+  --text-gray: #9CA3AF;
+  /* Secondary Text */
+  --text-muted: #6B7280;
+  /* Muted Text */
+
+  --border-color: #2E2E2E;
+  /* Subtle Border */
+  --border-hover: #3F3F46;
 
   /* Semantic Mappings */
   --background: var(--bg-dark);
@@ -32,10 +49,32 @@
   --color-primary: var(--primary);
   --color-border: var(--border);
   --color-muted: var(--muted);
+  --color-bg-hover: var(--bg-hover);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
