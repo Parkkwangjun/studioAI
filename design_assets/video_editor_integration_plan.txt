@@ -595,3 +595,344 @@ Your goal is to:
 - That works well with my low-spec local environment,
 - Leverages server-side/native FFmpeg for performance,
 - And fits naturally into my current app’s architecture without causing breakage.
+
+
+────────────────────────
+────────────────────────
+────────────────────────
+────────────────────────
+
+
+
+────────────────────────────────────────────────────────────
+TIMELINE JSON MODEL & RENDER SERVICE CONTRACT (COMPLETE VERSION)
+────────────────────────────────────────────────────────────
+
+This file defines the **flexible, defensive, app-aware timeline JSON model**  
+and the **render service contract** that Antigravity must follow when integrating  
+the multi-track video editor and FFmpeg rendering pipeline into my app.
+
+This document MUST be read together with the global integration guide and  
+FFmpeg rendering guidelines.  
+If the existing architecture differs, Antigravity MUST adapt this model safely,  
+explain the differences, and avoid breaking current flows.
+
+────────────────────────
+1. GENERAL PRINCIPLES
+────────────────────────
+
+• This JSON model is a **reference**, not a rigid schema.
+
+• Antigravity MUST:
+  - Inspect my current app’s asset model, Supabase schema, and project flows.
+  - Map or adapt the timeline model to fit the real data.
+  - Detect conflicts and propose refinements BEFORE implementing.
+
+• The renderer MUST:
+  - Use ONLY this structured timeline description (or its adapted version).
+  - Never rely on hidden UI state or per-component values.
+  - Treat the JSON as the single source of truth.
+
+• The design MUST:
+  - Remain flexible for future expansion.
+  - Support backward-compatible improvements.
+  - Allow defensive error handling, logging, and debuggability.
+
+────────────────────────
+2. TIMELINE CORE TYPES (REFERENCE STRUCTURE)
+────────────────────────
+
+Use these TypeScript-style interfaces as the conceptual guide.
+Antigravity may rename, reorganize, or extend fields if needed,
+but MUST preserve the semantic meaning and structural clarity.
+
+------------------------------------------------------------
+TimelineProject
+------------------------------------------------------------
+
+id: string
+title?: string
+description?: string
+durationMs: number
+createdAt?: string
+updatedAt?: string
+tracks: TimelineTrack[]
+
+appProjectId?: string
+- Optional mapping to my main app’s project entity (if needed)
+
+------------------------------------------------------------
+TimelineTrack
+------------------------------------------------------------
+
+id: string
+name?: string
+type: "video" | "image" | "audio" | "text" | "shape"
+index: number    // vertical ordering (0 = top track)
+clips: TimelineClip[]
+
+------------------------------------------------------------
+TimelineClipBase (shared fields for all clips)
+------------------------------------------------------------
+
+id: string
+
+// TIMELINE TIME RANGE (ABSOLUTE)
+startMs: number
+endMs: number
+
+// SOURCE MEDIA TIME RANGE (OPTIONAL)
+sourceStartMs?: number
+sourceEndMs?: number
+
+// COMMON FLAGS
+muted?: boolean
+opacity?: number   // 0–1
+zIndex?: number
+
+// BASIC EFFECTS
+fadeInMs?: number
+fadeOutMs?: number
+zoomIn?: boolean
+zoomOut?: boolean
+
+------------------------------------------------------------
+VideoClip
+------------------------------------------------------------
+kind: "video"
+assetId: string            // From my app’s asset library (Supabase, etc.)
+(plus TimelineClipBase)
+
+------------------------------------------------------------
+ImageClip
+------------------------------------------------------------
+kind: "image"
+assetId: string
+position?: { x: number; y: number }
+scale?: number
+(plus TimelineClipBase)
+
+------------------------------------------------------------
+AudioClip
+------------------------------------------------------------
+kind: "audio"
+assetId: string
+volume?: number
+(plus TimelineClipBase)
+
+------------------------------------------------------------
+TextClip
+------------------------------------------------------------
+kind: "text"
+text: string
+fontFamily?: string
+fontSize?: number
+fontWeight?: "normal" | "bold"
+color?: string
+align?: "left" | "center" | "right"
+
+position?: { x: number; y: number }
+maxWidthPct?: number
+
+backgroundColor?: string
+backgroundOpacity?: number
+paddingPx?: number
+borderRadiusPx?: number
+(plus TimelineClipBase)
+
+------------------------------------------------------------
+ShapeClip
+------------------------------------------------------------
+kind: "shape"
+shapeType: "rect"
+
+position: { x: number; y: number }
+size: { width: number; height: number }
+
+fillColor?: string
+fillOpacity?: number
+borderColor?: string
+borderWidthPx?: number
+borderRadiusPx?: number
+(plus TimelineClipBase)
+
+------------------------------------------------------------
+TimelineClip = VideoClip | ImageClip | AudioClip | TextClip | ShapeClip
+------------------------------------------------------------
+
+────────────────────────
+3. EXAMPLE TIMELINE JSON (REFERENCE ONLY)
+────────────────────────
+
+{
+  "id": "project_123",
+  "title": "Sample Timeline",
+  "durationMs": 60000,
+  "appProjectId": "myAppProject_abc",
+  "tracks": [
+    {
+      "id": "track_video_1",
+      "name": "Video",
+      "type": "video",
+      "index": 0,
+      "clips": [
+        {
+          "id": "clip_video_1",
+          "kind": "video",
+          "assetId": "asset_video_main",
+          "startMs": 0,
+          "endMs": 60000,
+          "sourceStartMs": 0,
+          "sourceEndMs": 60000,
+          "fadeInMs": 1000,
+          "fadeOutMs": 1000
+        }
+      ]
+    },
+    {
+      "id": "track_audio_1",
+      "name": "Music",
+      "type": "audio",
+      "index": 1,
+      "clips": [
+        {
+          "id": "clip_audio_1",
+          "kind": "audio",
+          "assetId": "asset_bgm_001",
+          "startMs": 0,
+          "endMs": 60000,
+          "volume": 0.7
+        }
+      ]
+    },
+    {
+      "id": "track_text_1",
+      "name": "Text Overlay",
+      "type": "text",
+      "index": 2,
+      "clips": [
+        {
+          "id": "clip_text_1",
+          "kind": "text",
+          "startMs": 5000,
+          "endMs": 15000,
+          "text": "Hello, this is a title!",
+          "fontFamily": "Pretendard",
+          "fontSize": 48,
+          "color": "#ffffff",
+          "align": "center",
+          "position": { "x": 0.5, "y": 0.1 },
+          "backgroundColor": "#000000",
+          "backgroundOpacity": 0.6,
+          "paddingPx": 16,
+          "borderRadiusPx": 8
+        }
+      ]
+    },
+    {
+      "id": "track_shape_1",
+      "name": "Highlight Box",
+      "type": "shape",
+      "index": 3,
+      "clips": [
+        {
+          "id": "clip_shape_1",
+          "kind": "shape",
+          "shapeType": "rect",
+          "startMs": 5000,
+          "endMs": 15000,
+          "position": { "x": 0.5, "y": 0.1 },
+          "size": { "width": 0.8, "height": 0.15 },
+          "fillColor": "#000000",
+          "fillOpacity": 0.6,
+          "borderRadiusPx": 8
+        }
+      ]
+    }
+  ]
+}
+
+────────────────────────
+4. RENDER SERVICE CONTRACT
+────────────────────────
+
+The FFmpeg-based rendering MUST follow an abstract, replaceable service layer.
+All FFmpeg specifics MUST be hidden inside this layer.
+
+------------------------------------------------------------
+Backend Interfaces (Reference)
+------------------------------------------------------------
+
+RenderTimelineRequest {
+  timeline: TimelineProject
+}
+
+RenderTimelineJob {
+  jobId: string
+  status: "queued" | "processing" | "done" | "error"
+  progressPercent?: number
+  outputUrl?: string
+  errorMessage?: string
+}
+
+------------------------------------------------------------
+API Endpoints (Reference)
+------------------------------------------------------------
+
+POST /api/render-timeline
+- Body: RenderTimelineRequest OR { timelineId: string }
+- Returns: { jobId: string }
+
+GET /api/render-timeline/status?jobId=...
+- Returns: RenderTimelineJob
+
+------------------------------------------------------------
+Rendering Flow
+------------------------------------------------------------
+
+1. Frontend sends timeline JSON to backend.
+2. Backend:
+   - Validates assets & timing.
+   - Builds the FFmpeg pipeline dynamically from the timeline.
+   - Runs native FFmpeg (CPU-based).
+   - Uploads output to Supabase/S3.
+   - Updates job status.
+3. Frontend polls and displays progress.
+4. When done, frontend shows download button using `outputUrl`.
+
+────────────────────────
+5. REQUIREMENTS FOR ANTIGRAVITY
+────────────────────────
+
+• DO NOT hard-code a single giant FFmpeg command.
+• DO NOT assume fixed numbers of tracks.
+• DO NOT embed rendering logic inside React components.
+
+• DO:
+  - Treat the model above as the conceptual framework.
+  - Adapt field names/types if necessary based on the real app architecture.
+  - Always explain proposed changes before implementing.
+  - Implement a clean service layer that maps timeline → FFmpeg pipeline.
+  - Ensure robust error handling:
+      - Missing URLs
+      - Invalid durations
+      - Unsupported effects
+      - FFmpeg stderr logs
+  - Implement fallback behavior:
+      - Render partial output rather than total failure when practical.
+  - Start with a minimal slice (video + audio + text) and expand safely.
+
+────────────────────────
+6. WHEN IN DOUBT
+────────────────────────
+
+If ANYTHING is ambiguous or seems incompatible with my app:
+
+1. STOP immediately.
+2. Summarize the issue in this chat.
+3. Propose multiple safe alternatives.
+4. Wait for my approval before modifying code.
+
+────────────────────────────────────────────────────────────
+END OF DOCUMENT
+────────────────────────────────────────────────────────────

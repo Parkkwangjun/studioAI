@@ -37,4 +37,5 @@ next-env.d.ts
 
 # Google Cloud Credentials
 vivid-science-460614-f5-f4350fbf6a07.json
-*.json
+
+.vercel
