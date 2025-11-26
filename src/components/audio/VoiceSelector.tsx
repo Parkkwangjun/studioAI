@@ -13,11 +13,9 @@ interface VoiceSelectorProps {
 export function VoiceSelector({ selectedVoice, onVoiceChange, onPreview }: VoiceSelectorProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
-    const [providerFilter, setProviderFilter] = useState<'all' | 'elevenlabs' | 'google'>('elevenlabs'); // Default to ElevenLabs
 
     const filteredVoices = ALL_VOICES.filter(voice => {
         if (genderFilter !== 'all' && voice.gender !== genderFilter) return false;
-        if (providerFilter !== 'all' && voice.provider !== providerFilter) return false;
         return true;
     });
 
@@ -38,12 +36,6 @@ export function VoiceSelector({ selectedVoice, onVoiceChange, onPreview }: Voice
                     <div className="flex flex-col items-start">
                         <div className="flex items-center gap-1.5">
                             <span className="text-sm font-medium text-white">{selectedVoice.name}</span>
-                            {selectedVoice.provider === 'elevenlabs' && (
-                                <span className="px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[0.6rem] font-bold flex items-center gap-0.5">
-                                    <Sparkles className="w-2 h-2" />
-                                    AI
-                                </span>
-                            )}
                         </div>
                         <span className="text-[0.7rem] text-(--text-gray)">
                             {selectedVoice.gender === 'male' ? '남성' : '여성'} • {selectedVoice.model}
@@ -65,29 +57,6 @@ export function VoiceSelector({ selectedVoice, onVoiceChange, onPreview }: Voice
                     {/* Dropdown Content */}
                     <div className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a24] border border-(--border-color) rounded-lg shadow-2xl z-20 max-h-[400px] overflow-hidden flex flex-col w-[300px]">
 
-                        {/* Provider Filter */}
-                        <div className="p-2 border-b border-(--border-color) flex gap-1">
-                            <button
-                                onClick={() => setProviderFilter('elevenlabs')}
-                                className={`flex-1 px-2 py-1.5 rounded text-[0.7rem] font-medium transition-colors flex items-center justify-center gap-1 ${providerFilter === 'elevenlabs'
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-[#15151e] text-(--text-gray) hover:text-white'
-                                    }`}
-                            >
-                                <Sparkles className="w-3 h-3" />
-                                ElevenLabs (AI)
-                            </button>
-                            <button
-                                onClick={() => setProviderFilter('google')}
-                                className={`flex-1 px-2 py-1.5 rounded text-[0.7rem] font-medium transition-colors flex items-center justify-center gap-1 ${providerFilter === 'google'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-[#15151e] text-(--text-gray) hover:text-white'
-                                    }`}
-                            >
-                                <Zap className="w-3 h-3" />
-                                Google (Fast)
-                            </button>
-                        </div>
 
                         {/* Gender Filter */}
                         <div className="p-2 border-b border-(--border-color) flex gap-1">

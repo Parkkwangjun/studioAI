@@ -114,6 +114,27 @@ export function Sidebar() {
                             })}
                         </ul>
                     </div>
+
+                    {/* Video Editor Section */}
+                    <div>
+                        <div className="my-4 border-t border-[#2a2a35] mx-3" />
+                        <ul className="flex flex-col gap-1">
+                            <li>
+                                <Link
+                                    href="/editor"
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-sm font-medium transition-colors duration-200",
+                                        pathname === '/editor'
+                                            ? "bg-(--primary-color) text-white"
+                                            : "text-[var(--text-gray)] hover:bg-white/5 hover:text-white"
+                                    )}
+                                >
+                                    <Video className="w-4 h-4" />
+                                    <span>비디오 에디터</span>
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 {/* User Profile Section */}

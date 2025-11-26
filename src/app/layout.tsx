@@ -15,7 +15,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body className="bg-(--bg-dark) text-white h-screen overflow-hidden flex">
         <Sidebar />
         <main className="flex-1 flex flex-col overflow-hidden relative py-6">

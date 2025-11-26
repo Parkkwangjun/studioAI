@@ -207,7 +207,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     const audioRefs = useRef<{ [key: number]: HTMLAudioElement | null }>({});
 
     const { updateScene, updateScenes, saveCurrentProject, updateProjectInfo, addAsset } = useProjectStore();
-    const { googleCredentials } = useSettingsStore();
+    const { googleCredentials, kieKey } = useSettingsStore();
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -375,13 +375,17 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-kie-key': kieKey
+                },
                 body: JSON.stringify({
                     text: scene.text,
                     voiceId: selectedVoice.id,
                     speed,
                     pitch,
-                    provider: 'google'
+                    provider: 'google',
+                    googleCredentials
                 })
             });
 
@@ -397,14 +401,20 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
 
                 // Background save
                 saveAudioToLibrary(data.audioUrl, scene.text);
+            } else if (data.error) {
+                toast.error(data.details || data.error);
             }
         } catch (error) {
             console.error('Generation error:', error);
-            toast.error('오디오 생성 실패');
+            if (error instanceof Error) {
+                toast.error(error.message);
+            } else {
+                toast.error('오디오 생성 실패');
+            }
         } finally {
             setGeneratingId(null);
         }
-    }, [selectedVoice.id, speed, pitch, updateScene, saveAudioToLibrary]);
+    }, [selectedVoice.id, speed, pitch, updateScene, saveAudioToLibrary, googleCredentials, kieKey]);
 
     const handleDownload = useCallback((scene: Scene) => {
         if (!scene.audioUrl) return;
@@ -420,23 +430,34 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-kie-key': kieKey
+                },
                 body: JSON.stringify({
-                    text: "안녕하세요",
+                    text: "안녕하세요. 이 목소리는 인공지능이 생성한 목소리입니다. 자연스러운지 확인해 보세요.",
                     voiceId: voice.id,
                     speed: 1.0,
                     pitch: 0,
-                    provider: 'google'
+                    provider: 'google',
+                    googleCredentials
                 })
             });
             const data = await response.json();
             if (data.audioUrl) {
                 new Audio(data.audioUrl).play();
+            } else if (data.error) {
+                toast.error(data.details || data.error);
             }
         } catch (e) {
             console.error(e);
+            if (e instanceof Error) {
+                toast.error(e.message);
+            } else {
+                toast.error('미리듣기 실패');
+            }
         }
-    }, []);
+    }, [googleCredentials, kieKey]);
 
     const handleGenerateAll = useCallback(async () => {
         setIsGeneratingAll(true);

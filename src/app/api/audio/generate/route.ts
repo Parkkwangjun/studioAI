@@ -28,6 +28,7 @@ function getClient(googleCredsJson: string) {
 /**
  * POST /api/audio/generate
  * Expects JSON body: { text, voiceId?, speed?, pitch?, googleCredentials }
+ * Supports both Google Cloud TTS and ElevenLabs (via Kie.ai)
  */
 export async function POST(request: Request) {
     try {
@@ -42,24 +43,28 @@ export async function POST(request: Request) {
 
         if (provider === 'elevenlabs') {
             // ----- ElevenLabs Logic via Kie.ai -----
+            console.log('[DEBUG] ElevenLabs provider detected');
+            console.log('[DEBUG] userKieKey:', userKieKey ? 'Present (length: ' + userKieKey.length + ')' : 'MISSING');
+            console.log('[DEBUG] selectedVoice:', selectedVoice);
+
             if (!userKieKey) {
                 return NextResponse.json({ error: '설정에서 KIE API 키를 먼저 입력해주세요.' }, { status: 401 });
             }
-
-            const modelId = selectedVoice?.model || 'eleven_turbo_v2_5';
 
             const payload = {
                 model: "elevenlabs/text-to-speech-turbo-2-5",
                 input: {
                     text,
-                    voice_id: voiceId,
-                    model_id: modelId,
-                    voice_settings: {
-                        stability: 0.5,
-                        similarity_boost: 0.75
-                    }
+                    voice: selectedVoice?.name || 'George', // Use voice name (e.g., "George", "Alice")
+                    stability: 0.5,
+                    similarity_boost: 0.75,
+                    style: 0,
+                    speed: speed || 1,
+                    timestamps: false
                 }
             };
+
+            console.log('[DEBUG] Sending payload to Kie.ai:', JSON.stringify(payload, null, 2));
 
             const response = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
                 method: 'POST',
@@ -70,31 +75,34 @@ export async function POST(request: Request) {
                 body: JSON.stringify(payload)
             });
 
+            console.log('[DEBUG] Kie.ai response status:', response.status);
+
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error('[DEBUG] Kie.ai error response:', errorText);
                 throw new Error(`Kie.ai API failed: ${errorText}`);
             }
 
             const apiResponse = await response.json();
+            console.log('[DEBUG] Kie.ai createTask response:', JSON.stringify(apiResponse, null, 2));
 
             if (apiResponse.code !== 200) {
-                throw new Error(`Kie.ai error: ${apiResponse.msg}`);
+                throw new Error(`Kie.ai error: ${apiResponse.msg || apiResponse.message}`);
             }
 
             // Polling for completion
             const taskId = apiResponse.data.taskId;
             let audioUrl = null;
 
-            // Simple polling (max 30 seconds)
             // Adaptive polling
             let attempts = 0;
-            const maxAttempts = 30; // 30 attempts
+            const maxAttempts = 120; // 120 attempts (approx 4-5 minutes)
 
             while (attempts < maxAttempts) {
                 attempts++;
 
-                // Adaptive delay: fast at first, then slower
-                const delay = attempts <= 5 ? 1000 : attempts <= 10 ? 2000 : 4000;
+                // Adaptive delay: faster polling
+                const delay = attempts <= 3 ? 500 : attempts <= 10 ? 1000 : 2000;
                 await new Promise(resolve => setTimeout(resolve, delay));
 
                 const statusRes = await fetch(`https://api.kie.ai/api/v1/jobs/getTask?taskId=${taskId}`, {
@@ -105,10 +113,24 @@ export async function POST(request: Request) {
 
                 const statusData = await statusRes.json();
 
-                if (statusData.data?.status === 'SUCCESS') {
-                    audioUrl = statusData.data.result.audio_url || statusData.data.result.url;
+                // Force immediate console output
+                process.stdout.write(`[Kie.ai] Poll attempt ${attempts}\n`);
+                console.log(`[Kie.ai] Poll attempt ${attempts}:`, JSON.stringify(statusData, null, 2));
+
+                const state = statusData.data?.state?.toLowerCase();
+
+                if (state === 'success') {
+                    // Parse resultJson to get audio URL
+                    try {
+                        const resultJson = JSON.parse(statusData.data.resultJson);
+                        audioUrl = resultJson.resultUrls?.[0];
+                        console.log('[Kie.ai] Success! Audio URL:', audioUrl);
+                    } catch (e) {
+                        console.error('[Kie.ai] Failed to parse resultJson:', e);
+                    }
                     break;
-                } else if (statusData.data?.status === 'FAILED') {
+                } else if (state === 'fail') {
+                    console.error('[Kie.ai] Task Failed:', statusData);
                     throw new Error(`Task failed: ${statusData.data.failMsg || 'Unknown error'}`);
                 }
             }
@@ -167,11 +189,10 @@ export async function POST(request: Request) {
 
         // ----- Convert to base64 data URL -----
         const base64Audio = audioBuffer.toString('base64');
-        let audioUrl = `data:audio/mp3;base64,${base64Audio}`;
+        const audioUrl = `data:audio/mp3;base64,${base64Audio}`;
 
         // ----- Return Base64 immediately for fast playback -----
         // The client will handle saving to Supabase in the background via /api/assets/save
-
 
         return NextResponse.json({
             audioUrl,

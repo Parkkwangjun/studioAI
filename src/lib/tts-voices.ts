@@ -407,7 +407,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     }
 ];
 
-export const ALL_VOICES = [...ELEVENLABS_VOICES, ...KOREAN_TTS_VOICES];
+export const ALL_VOICES = [...KOREAN_TTS_VOICES];
 
 // Helper functions
 export function getVoicesByGender(gender: 'male' | 'female'): TTSVoice[] {
@@ -419,5 +419,5 @@ export function getVoiceById(id: string): TTSVoice | undefined {
 }
 
 export function getDefaultVoice(): TTSVoice {
-    return ELEVENLABS_VOICES[0]; // Default to ElevenLabs George
+    return KOREAN_TTS_VOICES[0]; // Default to first Korean voice
 }
