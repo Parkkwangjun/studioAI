@@ -5,6 +5,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useProjectStore, AssetType, Asset } from '@/store/useProjectStore';
 import { AssetCard } from '@/components/library/AssetCard';
 import dynamic from 'next/dynamic';
+import { useVideoPoller } from '@/hooks/useVideoPoller';
+import { useImagePoller } from '@/hooks/useImagePoller';
+import { useAudioTaskPoller } from '@/hooks/useAudioTaskPoller';
 
 const AssetDetailModal = dynamic(() => import('@/components/library/AssetDetailModal').then(mod => mod.AssetDetailModal), { ssr: false });
 const ProjectManager = dynamic(() => import('@/components/library/ProjectManager').then(mod => mod.ProjectManager), { ssr: false });
@@ -22,6 +25,11 @@ export function LibraryPanel() {
     const pathname = usePathname();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const supabase = createClient();
+
+    // Enable global polling for all asset types
+    useVideoPoller();
+    useImagePoller();
+    useAudioTaskPoller();
 
     if (pathname === '/login') return null;
 

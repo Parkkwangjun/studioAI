@@ -15,7 +15,14 @@ export async function GET(request: Request) {
     }
 
     try {
-        const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`;
+        // Determine endpoint based on taskId format
+        // Veo tasks usually start with "veo_task_", others (Bytedance/Grok) are typically hex strings
+        const isVeoTask = taskId.startsWith('veo_task_');
+        const url = isVeoTask
+            ? `https://api.kie.ai/api/v1/veo/record-info?taskId=${taskId}`
+            : `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`;
+
+        console.log(`[VideoStatus] Checking status for ${taskId} (Is Veo: ${isVeoTask})`);
 
         const response = await fetch(url, {
             headers: {
@@ -31,45 +38,60 @@ export async function GET(request: Request) {
         }
 
         const apiResponse = await response.json();
+        console.log('[VideoStatus] Raw KIE Response:', JSON.stringify(apiResponse, null, 2));
 
-        // KIE API response structure: { code: 200, msg: "success", data: { state, resultJson, ... } }
         if (apiResponse.code !== 200) {
             console.warn('KIE API Code not 200:', apiResponse);
-            if (apiResponse.msg === 'recordInfo is null') {
-                return NextResponse.json({ status: 'failed', error: 'Task not found (recordInfo is null)' });
+            if (apiResponse.msg?.includes('record is null')) {
+                return NextResponse.json({ status: 'failed', error: 'Task not found (record is null)' });
             }
             throw new Error(`KIE API error: ${apiResponse.msg}`);
         }
 
         const data = apiResponse.data;
         if (!data) {
-            return NextResponse.json({ status: 'failed', error: 'No data received from KIE' });
+            console.log('[VideoStatus] Data is null, returning pending status');
+            return NextResponse.json({ status: 'pending', message: 'Task initializing' });
         }
 
-        const state = data.state; // "waiting", "success", "fail"
-        console.log(`[VideoStatus] Task ${taskId} state:`, state); // Debug Log
+        let status = 'pending';
+        let videoUrl: string | null = null;
+        let errorMsg: string | null = null;
+        let duration: number | undefined = undefined;
 
-        if (state === 'success') {
-            console.log(`[VideoStatus] Raw resultJson:`, data.resultJson); // Debug Log
-
-            let resultJson;
-            try {
-                resultJson = JSON.parse(data.resultJson);
-            } catch (e) {
-                console.error('[VideoStatus] Failed to parse resultJson:', data.resultJson);
-                return NextResponse.json({ status: 'failed', error: 'Invalid result JSON from provider' });
+        if (isVeoTask) {
+            // Veo Logic
+            const successFlag = data.successFlag; // 0: Generating, 1: Success, 2: Failed, 3: Generation Failed
+            if (successFlag === 1) {
+                status = 'completed';
+                videoUrl = data.response?.resultUrls?.[0] || null;
+                duration = data.response?.duration;
+            } else if (successFlag === 2 || successFlag === 3) {
+                status = 'failed';
+                errorMsg = data.errorMessage || 'Veo generation failed';
             }
+        } else {
+            // Jobs Logic (Bytedance/Grok)
+            const state = data.state; // "waiting", "success", "fail"
+            if (state === 'success') {
+                status = 'completed';
+                try {
+                    const resultData = JSON.parse(data.resultJson);
+                    videoUrl = resultData.resultUrls?.[0] || null;
+                } catch (e) {
+                    console.error('Failed to parse resultJson:', e);
+                    status = 'failed';
+                    errorMsg = 'Failed to parse video result';
+                }
+            } else if (state === 'fail') {
+                status = 'failed';
+                errorMsg = data.failMsg || 'Job generation failed';
+            }
+        }
 
-            // Extract video URL - try multiple possible fields
-            let videoUrl = resultJson.resultUrls?.[0] || resultJson.url || resultJson.video_url;
-            console.log(`[VideoStatus] Extracted videoUrl:`, videoUrl); // Debug Log
-
+        if (status === 'completed') {
             if (!videoUrl) {
-                console.error('No video URL found in resultJson:', resultJson);
-                return NextResponse.json({
-                    status: 'failed',
-                    error: 'Video generation completed but no URL was returned'
-                });
+                return NextResponse.json({ status: 'failed', error: 'Video completed but URL missing' });
             }
 
             // Upload to Supabase Storage for permanence
@@ -83,16 +105,11 @@ export async function GET(request: Request) {
             return NextResponse.json({
                 status: 'completed',
                 videoUrl: videoUrl,
-                duration: resultJson.duration // Pass duration if available
+                duration: duration
             });
-        } else if (state === 'fail') {
-            console.error('Task failed:', data.failMsg);
-            return NextResponse.json({
-                status: 'failed',
-                error: data.failMsg || 'Video generation failed'
-            });
+        } else if (status === 'failed') {
+            return NextResponse.json({ status: 'failed', error: errorMsg });
         } else {
-            // state === 'waiting'
             return NextResponse.json({ status: 'pending' });
         }
 

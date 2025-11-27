@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
-import { Wand2, Mail, Lock, Loader2, Github } from 'lucide-react';
+import { Wand2, Mail, Lock, Loader2 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -11,14 +10,21 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSignUp, setIsSignUp] = useState(false);
-    const router = useRouter();
-    const supabase = createClient();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
+        // ✅ 타임아웃 설정 (30초)
+        let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
+            setIsLoading(false);
+            toast.error('로그인 시간이 초과되었습니다. 다시 시도해주세요.');
+        }, 30000);
+
         try {
+            // ✅ Supabase 클라이언트 초기화 (회원가입/로그인 공통)
+            const supabase = createClient();
+
             if (isSignUp) {
                 const { data, error } = await supabase.auth.signUp({
                     email,
@@ -31,44 +37,82 @@ export default function LoginPage() {
 
                 // Check if email confirmation is required
                 if (data?.user?.identities?.length === 0) {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    setIsLoading(false);
                     toast.error('이 이메일은 이미 사용 중입니다.');
                 } else if (data?.user && !data?.session) {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    setIsLoading(false);
                     toast.success('회원가입 성공! 이메일을 확인해주세요.');
                 } else {
+                    if (timeoutId) clearTimeout(timeoutId);
                     toast.success('회원가입 및 로그인 성공!');
-                    router.push('/library');
-                    router.refresh();
+                    // ✅ 전체 페이지 리로드하여 세션 반영
+                    window.location.href = '/library';
                 }
             } else {
-                const { error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
-                if (error) throw error;
-                toast.success('로그인 성공!');
-                router.push('/library');
-                router.refresh();
+                // ✅ 위에서 이미 초기화했으므로 재사용 (변수명 일치)
+                const supabaseClient = supabase;
+
+                if (!supabaseClient) {
+                    throw new Error('Supabase 클라이언트를 초기화할 수 없습니다.');
+                }
+
+                // ✅ 타임아웃이 긴 경우를 대비한 재시도 로직
+                let data, error;
+                let retries = 0;
+                const maxRetries = 3;
+
+                while (retries < maxRetries) {
+                    try {
+                        const result = await supabaseClient.auth.signInWithPassword({
+                            email,
+                            password,
+                        });
+
+                        data = result.data;
+                        error = result.error;
+                        break; // 성공하면 루프 종료
+                    } catch (err: any) {
+                        retries++;
+                        if (retries < maxRetries) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                        } else {
+                            error = err;
+                        }
+                    }
+                }
+
+                if (error) {
+
+                    // ✅ 522 에러 처리 (Cloudflare 타임아웃)
+                    if (error.message?.includes('522') || error.status === 522) {
+                        throw new Error('Supabase 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요. (에러 코드: 522)');
+                    }
+
+                    throw error;
+                }
+
+                // ✅ 세션이 업데이트될 때까지 잠시 대기
+                if (data?.session) {
+                    if (timeoutId) clearTimeout(timeoutId);
+
+                    // ✅ 세션이 쿠키에 저장될 때까지 잠시 대기
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    toast.success('로그인 성공!');
+                    // ✅ 전체 페이지 리로드하여 세션 반영
+                    window.location.href = '/library';
+                } else {
+                    throw new Error('세션을 받지 못했습니다.');
+                }
             }
         } catch (error) {
             console.error('Auth error:', error);
             const errorMessage = error instanceof Error ? error.message : '인증 실패';
             toast.error(errorMessage);
-        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
             setIsLoading(false);
-        }
-    };
-
-    const handleSocialLogin = async (provider: 'google' | 'github') => {
-        try {
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider,
-                options: {
-                    redirectTo: `${location.origin}/auth/callback`,
-                },
-            });
-            if (error) throw error;
-        } catch (error) {
-            toast.error('소셜 로그인 실패');
         }
     };
 
@@ -131,49 +175,6 @@ export default function LoginPage() {
                         )}
                     </button>
                 </form>
-
-                <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-[#2a2a35]"></div>
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-[#1a1a24] px-2 text-(--text-gray)">Or continue with</span>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                    <button
-                        onClick={() => handleSocialLogin('github')}
-                        className="flex items-center justify-center gap-2 bg-[#15151e] hover:bg-[#2a2a35] border border-[#2a2a35] text-white py-2.5 rounded-lg transition-colors text-sm font-medium"
-                    >
-                        <Github className="w-4 h-4" />
-                        GitHub
-                    </button>
-                    <button
-                        onClick={() => handleSocialLogin('google')}
-                        className="flex items-center justify-center gap-2 bg-[#15151e] hover:bg-[#2a2a35] border border-[#2a2a35] text-white py-2.5 rounded-lg transition-colors text-sm font-medium"
-                    >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                            <path
-                                fill="currentColor"
-                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                            />
-                            <path
-                                fill="currentColor"
-                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                            />
-                            <path
-                                fill="currentColor"
-                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                            />
-                            <path
-                                fill="currentColor"
-                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                            />
-                        </svg>
-                        Google
-                    </button>
-                </div>
 
                 <div className="mt-6 text-center">
                     <button

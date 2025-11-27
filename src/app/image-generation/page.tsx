@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/Button"
 import { Input, Textarea } from "@/components/ui/Input"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs"
-import { Image as ImageIcon, Upload, Sparkles, Wand2, Settings2, Loader2, Download, Video, Save, Check } from "lucide-react"
+import { Image as ImageIcon, Upload, Sparkles, Wand2, Settings2, Loader2, Download, Video, Save, Check, X, Trash2 } from "lucide-react"
 import { MagicPromptButton } from "@/components/common/MagicPromptButton"
 import { useSettingsStore } from "@/store/useSettingsStore"
 import { useProjectStore } from "@/store/useProjectStore"
+import toast from 'react-hot-toast'
 
 interface GeneratedImage {
     id: string;
@@ -20,21 +21,30 @@ interface GeneratedImage {
 
 const GeneratedImageCard = React.memo(({ img }: { img: GeneratedImage }) => (
     <div className="group relative aspect-square rounded-lg overflow-hidden bg-gray-800 hover:ring-2 hover:ring-primary transition-all cursor-pointer">
-        <img
-            src={img.url}
-            alt={img.prompt}
-            className="w-full h-full object-cover transition-transform group-hover:scale-105"
-            loading="lazy"
-        />
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <div className="bg-green-500/90 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                Saved to Library
+        {img.url ? (
+            <>
+                <img
+                    src={img.url}
+                    alt={img.prompt}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                    loading="lazy"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <div className="bg-green-500/90 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Saved to Library
+                    </div>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 p-2 bg-linear-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-[10px] text-white truncate">{img.prompt}</p>
+                </div>
+            </>
+        ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                <p className="text-xs text-gray-400">생성 중...</p>
             </div>
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 p-2 bg-linear-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-            <p className="text-[10px] text-white truncate">{img.prompt}</p>
-        </div>
+        )}
     </div>
 ));
 GeneratedImageCard.displayName = 'GeneratedImageCard';
@@ -44,6 +54,13 @@ export default function ImageGenerationPage() {
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [aspectRatio, setAspectRatio] = React.useState("1:1")
     const [selectedModel, setSelectedModel] = React.useState("nanobanana")
+    
+    // Image-to-Image specific states
+    const [referenceImages, setReferenceImages] = React.useState<string[]>([]) // Display URLs
+    const [referenceImageFiles, setReferenceImageFiles] = React.useState<File[]>([]) // Files for upload
+    const [isUploadingRefs, setIsUploadingRefs] = React.useState(false)
+    const [img2imgPrompt, setImg2imgPrompt] = React.useState("")
+    const [resolution, setResolution] = React.useState<'1K' | '2K' | '4K'>('1K')
 
     const { falKey, openaiKey, kieKey } = useSettingsStore()
     const { addAsset, currentProject, saveCurrentProject } = useProjectStore()
@@ -64,6 +81,117 @@ export default function ImageGenerationPage() {
             .sort((a, b) => b.createdAt - a.createdAt);
     }, [currentProject?.assets]);
 
+    const handleReferenceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            const newFiles: File[] = [];
+            const newImages: string[] = [];
+            
+            Array.from(files).forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    newFiles.push(file);
+                    newImages.push(URL.createObjectURL(file));
+                }
+            });
+            
+            setReferenceImageFiles(prev => [...prev, ...newFiles].slice(0, 8));
+            setReferenceImages(prev => [...prev, ...newImages].slice(0, 8));
+        }
+        e.target.value = '';
+    };
+
+    const removeReferenceImage = (index: number) => {
+        setReferenceImages(prev => prev.filter((_, i) => i !== index));
+        setReferenceImageFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleImg2ImgGenerate = async () => {
+        if (!img2imgPrompt.trim()) {
+            toast.warning('프롬프트를 입력해주세요.');
+            return;
+        }
+
+        if (referenceImageFiles.length === 0) {
+            toast.warning('참조 이미지를 최소 1장 이상 업로드해주세요.');
+            return;
+        }
+
+        setIsGenerating(true);
+        
+        try {
+            // Upload reference images
+            setIsUploadingRefs(true);
+            const uploadedUrls: string[] = [];
+            
+            for (const file of referenceImageFiles) {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const uploadRes = await fetch('/api/upload-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (uploadRes.ok) {
+                    const { url } = await uploadRes.json();
+                    uploadedUrls.push(url);
+                }
+            }
+            
+            setIsUploadingRefs(false);
+            
+            if (uploadedUrls.length === 0) {
+                throw new Error('이미지 업로드에 실패했습니다.');
+            }
+
+            // Generate image with references
+            const createRes = await fetch('/api/image/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-fal-key': falKey || '',
+                    'x-openai-key': openaiKey || '',
+                    'x-kie-key': kieKey || ''
+                },
+                body: JSON.stringify({
+                    prompt: img2imgPrompt,
+                    imageSize: aspectRatio === "16:9" ? "landscape_16_9" : aspectRatio === "9:16" ? "portrait_16_9" : "square_hd",
+                    model: 'nanobanana',
+                    resolution: resolution,
+                    referenceImages: uploadedUrls
+                })
+            });
+
+            const createData = await createRes.json();
+            if (!createRes.ok) throw new Error(createData.error || 'Failed to start generation');
+
+            // Create pending asset immediately
+            if (createData.status === 'pending' && createData.taskId) {
+                const taskId = createData.taskId;
+                console.log('[Img2Img] Task created:', taskId);
+                
+                await addAsset({
+                    type: 'image',
+                    title: `${img2imgPrompt.slice(0, 30)}... (생성 중...)`,
+                    url: '',
+                    tag: `pending-image:${taskId}`,
+                    sceneNumber: 0
+                });
+
+                toast.success('이미지 생성이 시작되었습니다! 라이브러리에서 진행 상황을 확인하세요.');
+                setIsGenerating(false);
+                // Clear reference images after successful submission
+                setReferenceImages([]);
+                setReferenceImageFiles([]);
+                setImg2imgPrompt('');
+            }
+        } catch (error) {
+            console.error('Img2Img generation error:', error);
+            setIsGenerating(false);
+            toast.error('이미지 생성에 실패했습니다. 다시 시도해주세요.');
+        }
+    };
+
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
 
@@ -82,58 +210,31 @@ export default function ImageGenerationPage() {
                 body: JSON.stringify({
                     prompt,
                     imageSize: aspectRatio === "16:9" ? "landscape_16_9" : aspectRatio === "9:16" ? "portrait_16_9" : "square_hd",
-                    model: selectedModel
+                    model: selectedModel,
+                    resolution: selectedModel === 'nanobanana' ? resolution : undefined
                 })
             });
 
             const createData = await createRes.json();
             if (!createRes.ok) throw new Error(createData.error || 'Failed to start generation');
 
-            // Handle Polling for Nanobanana (status: 'pending')
+            // Handle Nanobanana: Create pending asset immediately
             if (createData.status === 'pending' && createData.taskId) {
                 const taskId = createData.taskId;
-
-                // 2. Poll for Status
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const kieKey = useSettingsStore.getState().kieKey;
-                        const statusRes = await fetch(`/api/image-generation/${taskId}`, {
-                            headers: { 'x-kie-key': kieKey || '' }
-                        });
-                        const statusData = await statusRes.json();
-
-                        if (statusData.data?.state === 'success') {
-                            clearInterval(pollInterval);
-                            const resultJson = JSON.parse(statusData.data.resultJson);
-                            // Try multiple paths for image URL
-                            const imageUrl = resultJson.resultUrls?.[0]
-                                || resultJson.url
-                                || resultJson.image_url
-                                || (Array.isArray(resultJson) ? resultJson[0] : null);
-
-                            if (imageUrl) {
-                                // Auto-save to library
-                                if (currentProject) {
+                console.log('[Text2Img] Task created:', taskId);
+                
                                     await addAsset({
                                         type: 'image',
-                                        title: `AI Generated - ${prompt}`,
-                                        url: imageUrl,
-                                        tag: selectedModel,
+                    title: `${prompt.slice(0, 30)}... (생성 중...)`,
+                    url: '',
+                    tag: `pending-image:${taskId}`,
                                         sceneNumber: 0
                                     });
-                                    saveCurrentProject();
-                                }
-                            }
+
+                toast.success('이미지 생성이 시작되었습니다! 라이브러리에서 진행 상황을 확인하세요.');
                             setIsGenerating(false);
-                        } else if (statusData.data?.state === 'fail') {
-                            clearInterval(pollInterval);
-                            setIsGenerating(false);
-                            alert(`Generation failed: ${statusData.data.failMsg}`);
-                        }
-                    } catch (error) {
-                        console.error('Polling error:', error);
-                    }
-                }, 2000);
+                setPrompt('');
+                return; // Exit early, polling handled by useImagePoller
             }
             // Handle Flux/Direct Response (imageUrl present)
             else if (createData.imageUrl) {
@@ -157,7 +258,7 @@ export default function ImageGenerationPage() {
         } catch (error) {
             console.error('Generation error:', error);
             setIsGenerating(false);
-            alert('Failed to generate image. Please try again.');
+            toast.error('이미지 생성에 실패했습니다. 다시 시도해주세요.');
         }
     };
 
@@ -242,6 +343,26 @@ export default function ImageGenerationPage() {
                             </div>
                         </div>
 
+                        {/* Resolution Selection (Nanobanana only) */}
+                        {selectedModel === 'nanobanana' && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-300">해상도</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(['1K', '2K', '4K'] as const).map((res) => (
+                                        <Button
+                                            key={res}
+                                            variant={resolution === res ? "secondary" : "outline"}
+                                            size="sm"
+                                            onClick={() => setResolution(res)}
+                                            className={resolution === res ? "bg-primary text-white hover:bg-primary/90" : ""}
+                                        >
+                                            {res}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Aspect Ratio */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-300">비율</label>
@@ -282,48 +403,152 @@ export default function ImageGenerationPage() {
                     </TabsContent>
 
                     <TabsContent value="image-to-image" className="space-y-6">
-                        <div className="relative">
+                        {/* Reference Images Upload */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                                    <ImageIcon className="w-4 h-4" />
+                                    참조 이미지 (최대 8장)
+                                </label>
+                                {referenceImages.length > 0 && (
+                                    <button
+                                        onClick={() => {
+                                            setReferenceImages([]);
+                                            setReferenceImageFiles([]);
+                                        }}
+                                        className="text-xs text-muted hover:text-red-400 transition-colors flex items-center gap-1"
+                                    >
+                                        <X className="w-3 h-3" />
+                                        전체 삭제
+                                    </button>
+                                )}
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2">
+                                {referenceImages.map((img, idx) => (
+                                    <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-border group hover:border-primary transition-all">
+                                        <img src={img} alt={`참조 ${idx + 1}`} className="w-full h-full object-cover" />
+                                        <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                                            {idx + 1}
+                                        </div>
+                                        <button
+                                            onClick={() => removeReferenceImage(idx)}
+                                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                                        >
+                                            <Trash2 className="w-5 h-5 text-white" />
+                                        </button>
+                                    </div>
+                                ))}
+                                {referenceImages.length < 8 && (
+                                    <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-white/5 transition-all ${isUploadingRefs ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <Upload className="w-5 h-5 text-muted mb-1" />
+                                        <span className="text-[0.65rem] text-muted">추가</span>
                             <input
                                 type="file"
-                                accept="image/*"
+                                            accept="image/jpeg,image/png,image/webp" 
+                                            multiple 
                                 className="hidden"
-                                id="img-to-img-upload"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                        // Handle file upload (mock for now or implement real upload)
+                                            onChange={handleReferenceImageUpload}
+                                            disabled={isUploadingRefs}
+                                        />
+                                    </label>
+                                )}
+                            </div>
 
-                                        // You might want to set a state here to show the selected image
-                                    }
-                                }}
-                            />
-                            <label
-                                htmlFor="img-to-img-upload"
-                                className="block w-full"
-                            >
-                                <Card className="border-dashed border-2 border-border bg-transparent hover:bg-white/5 transition-colors cursor-pointer w-full">
-                                    <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                                        <Upload className="w-10 h-10 text-muted mb-4" />
-                                        <h3 className="text-lg font-medium text-white mb-1">참조 이미지 업로드</h3>
-                                        <p className="text-sm text-muted">클릭하거나 이미지를 드래그하세요</p>
-                                        <p className="text-xs text-muted mt-2">JPG, PNG (최대 10MB)</p>
-                                    </CardContent>
-                                </Card>
-                            </label>
+                            {referenceImages.length === 0 && (
+                                <div className="text-xs text-muted bg-white/5 rounded-lg p-3 border border-border">
+                                    💡 참조 이미지를 업로드하면 해당 이미지의 스타일과 구도를 반영한 새로운 이미지를 생성합니다.
+                                </div>
+                            )}
                         </div>
 
+                        {/* Resolution Selection for Nanobanana */}
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-300">변경 프롬프트</label>
-                            <Textarea
-                                placeholder="이미지를 어떻게 변경하고 싶으신가요?"
-                                className="h-24 w-full resize-none"
-                            />
+                            <label className="text-sm font-medium text-gray-300">해상도</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {(['1K', '2K', '4K'] as const).map((res) => (
+                                    <Button
+                                        key={res}
+                                        variant={resolution === res ? "secondary" : "outline"}
+                                        size="sm"
+                                        onClick={() => setResolution(res)}
+                                        className={resolution === res ? "bg-primary text-white hover:bg-primary/90" : ""}
+                                    >
+                                        {res}
+                                    </Button>
+                                ))}
+                            </div>
                         </div>
 
-                        <Button className="w-full h-12 text-lg font-semibold" size="lg" disabled>
+                        {/* Aspect Ratio */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-300">비율</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {['1:1', '16:9', '9:16', '4:3', '3:4'].map((ratio) => (
+                                    <Button
+                                        key={ratio}
+                                        variant={aspectRatio === ratio ? "secondary" : "outline"}
+                                        size="sm"
+                                        onClick={() => setAspectRatio(ratio)}
+                                        className={aspectRatio === ratio ? "bg-primary text-white hover:bg-primary/90" : ""}
+                                    >
+                                        {ratio}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Prompt Input */}
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <label className="text-sm font-medium text-gray-300">생성 프롬프트</label>
+                                <MagicPromptButton
+                                    prompt={img2imgPrompt}
+                                    onPromptChange={setImg2imgPrompt}
+                                    type="image"
+                                />
+                            </div>
+                            <Textarea
+                                placeholder="참조 이미지를 기반으로 어떤 이미지를 생성하고 싶으신가요?"
+                                className="h-24 w-full resize-none"
+                                value={img2imgPrompt}
+                                onChange={(e) => setImg2imgPrompt(e.target.value)}
+                                maxLength={2000}
+                            />
+                            <div className="flex justify-end text-xs text-muted">
+                                <span>{img2imgPrompt.length}/2000</span>
+                            </div>
+                        </div>
+
+                        {/* Generate Button */}
+                        <Button 
+                            className="w-full h-12 text-lg font-semibold" 
+                            size="lg"
+                            onClick={handleImg2ImgGenerate}
+                            disabled={isGenerating || !img2imgPrompt.trim() || referenceImages.length === 0}
+                        >
+                            {isGenerating ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                    {isUploadingRefs ? '이미지 업로드 중...' : '생성 중...'}
+                                </>
+                            ) : (
+                                <>
                             <Wand2 className="w-5 h-5 mr-2" />
-                            변환하기 (준비 중)
+                                    이미지 생성하기
+                                </>
+                            )}
                         </Button>
+
+                        {/* Info Box */}
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                            <p className="text-xs text-blue-300 leading-relaxed">
+                                <strong className="text-white">✨ Nano Banana Pro 모델</strong>
+                                <br />• 여러 참조 이미지를 조합하여 독특한 스타일 생성
+                                <br />• 고해상도 지원 (최대 4K)
+                                <br />• 브랜드 일관성 유지에 최적화
+                            </p>
+                        </div>
                     </TabsContent>
                 </Tabs>
             </div>

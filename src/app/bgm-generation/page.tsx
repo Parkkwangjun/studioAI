@@ -8,6 +8,7 @@ import { Radio, Play, Pause, Download, Loader2, Music, Mic, Disc } from "lucide-
 import { useSettingsStore } from "@/store/useSettingsStore"
 import { useProjectStore } from "@/store/useProjectStore"
 import { MagicPromptButton } from "@/components/common/MagicPromptButton"
+import toast from 'react-hot-toast'
 
 interface GeneratedBgm {
     id: string;
@@ -33,13 +34,36 @@ export default function BgmGenerationPage() {
     const [style, setStyle] = React.useState("")
     const [isInstrumental, setIsInstrumental] = React.useState(false)
     const [isGenerating, setIsGenerating] = React.useState(false)
-    const [generatedBgm, setGeneratedBgm] = React.useState<GeneratedBgm[]>([])
     const [playingId, setPlayingId] = React.useState<string | null>(null)
     const audioRefs = React.useRef<{ [key: string]: HTMLAudioElement }>({})
     const { kieKey } = useSettingsStore()
     const { addAsset, currentProject, saveCurrentProject } = useProjectStore()
 
     const [selectedLyrics, setSelectedLyrics] = React.useState<{ title: string; content: string } | null>(null);
+
+    // Get BGM assets from project library (most recent first)
+    const generatedBgm = React.useMemo(() => {
+        if (!currentProject?.assets) return []
+        
+        return currentProject.assets
+            .filter(asset => asset.type === 'bgm')
+            .map(asset => {
+                const createdAtStr = asset.createdAt || new Date().toISOString()
+                const createdAt = new Date(createdAtStr).getTime() || Date.now()
+                return {
+                    id: asset.id.toString(),
+                    url: asset.url || '',
+                    title: asset.title.replace(' (생성 중...)', '').replace('(생성 중...)', ''),
+                    prompt: asset.title.replace(' (생성 중...)', '').replace('(생성 중...)', ''), // Use title as prompt for now
+                    duration: asset.duration || 0,
+                    createdAt: createdAt,
+                    imageUrl: undefined, // Can be added later if needed
+                    isPending: asset.tag?.startsWith('pending-bgm:') || false,
+                    hasUrl: !!asset.url
+                }
+            })
+            .sort((a, b) => b.createdAt - a.createdAt)
+    }, [currentProject?.assets])
 
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
@@ -71,62 +95,28 @@ export default function BgmGenerationPage() {
 
             const taskId = createData.data.taskId;
 
-            // 2. Poll for Status
-            const pollInterval = setInterval(async () => {
-                try {
-                    const statusRes = await fetch(`/api/bgm-generation/${taskId}`, {
-                        headers: { 'x-kie-key': kieKey || '' }
-                    });
-                    const statusData = await statusRes.json();
+            // Create pending asset immediately
+            if (currentProject) {
+                await addAsset({
+                    type: 'bgm',
+                    title: `${title || prompt.slice(0, 30)}... (생성 중...)`,
+                    url: '',
+                    tag: `pending-bgm:${taskId}`,
+                    sceneNumber: 0
+                });
+                saveCurrentProject();
+            }
 
-                    if (statusData.data.status === 'SUCCESS' || statusData.data.status === 'FIRST_SUCCESS') {
-                        // If SUCCESS, we might have multiple tracks, but let's just take the first one for now or handle list
-                        const tracks = statusData.data.response.sunoData;
-
-                        if (tracks && tracks.length > 0) {
-                            clearInterval(pollInterval);
-                            const newTracks = tracks.map((track: SunoTrack) => ({
-                                id: track.id,
-                                url: track.audioUrl,
-                                title: track.title || title || "Untitled",
-                                prompt: prompt, // Using the prompt used for generation as lyrics/description
-                                duration: track.duration,
-                                createdAt: Date.now(),
-                                imageUrl: track.imageUrl
-                            }));
-
-                            setGeneratedBgm(prev => [...newTracks, ...prev]);
-
-                            // Auto-save to library
-                            if (currentProject) {
-                                newTracks.forEach((track: GeneratedBgm) => {
-                                    addAsset({
-                                        type: 'audio',
-                                        title: track.title || `BGM - ${prompt.slice(0, 20)}...`,
-                                        url: track.url,
-                                        tag: 'bgm',
-                                        sceneNumber: 0 // Global asset
-                                    });
-                                });
-                                saveCurrentProject();
-                            }
-
-                            setIsGenerating(false);
-                        }
-                    } else if (statusData.data.status === 'GENERATE_AUDIO_FAILED' || statusData.data.status === 'CREATE_TASK_FAILED') {
-                        clearInterval(pollInterval);
-                        setIsGenerating(false);
-                        alert(`Generation failed: ${statusData.data.errorMessage}`);
-                    }
-                } catch (error) {
-                    console.error('Polling error:', error);
-                }
-            }, 5000); // Poll every 5 seconds for Suno as it takes longer
+            toast.success('배경음악 생성이 시작되었습니다! 라이브러리에서 진행 상황을 확인하세요.');
+            setIsGenerating(false);
+            setPrompt('');
+            setTitle('');
+            // Polling handled by useAudioTaskPoller
 
         } catch (error) {
             console.error('Generation error:', error);
             setIsGenerating(false);
-            alert('Failed to generate BGM. Please try again.');
+            toast.error('배경음악 생성에 실패했습니다. 다시 시도해주세요.');
         }
     };
 
@@ -258,44 +248,60 @@ export default function BgmGenerationPage() {
                                 <div key={bgm.id} className="flex flex-col p-4 rounded-lg bg-[#262633] border border-[#2a2a35] hover:border-primary transition-colors group">
                                     <div className="flex items-start gap-4 mb-4">
                                         <div className="w-20 h-20 rounded-lg bg-black/50 overflow-hidden shrink-0 relative">
-                                            {bgm.imageUrl ? (
+                                            {bgm.isPending || !bgm.hasUrl ? (
+                                                <div className="w-full h-full flex items-center justify-center text-primary">
+                                                    <Loader2 className="w-8 h-8 animate-spin" />
+                                                </div>
+                                            ) : bgm.imageUrl ? (
                                                 <img src={bgm.imageUrl} alt={bgm.title} className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-600">
                                                     <Music className="w-8 h-8" />
                                                 </div>
                                             )}
-                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button
-                                                    size="icon"
-                                                    variant="primary"
-                                                    className="rounded-full w-8 h-8"
-                                                    onClick={() => togglePlay(bgm.id, bgm.url)}
-                                                >
-                                                    {playingId === bgm.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                                                </Button>
-                                            </div>
+                                            {!bgm.isPending && bgm.hasUrl && (
+                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button
+                                                        size="icon"
+                                                        variant="primary"
+                                                        className="rounded-full w-8 h-8"
+                                                        onClick={() => togglePlay(bgm.id, bgm.url)}
+                                                    >
+                                                        {playingId === bgm.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="text-base font-bold text-white truncate mb-1">{bgm.title}</h4>
-                                            <p className="text-xs text-gray-400 line-clamp-2 mb-2">{bgm.prompt}</p>
-                                            <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                                                <span className="bg-white/5 px-1.5 py-0.5 rounded">{Math.floor(bgm.duration)}s</span>
-                                                <span>{new Date(bgm.createdAt).toLocaleDateString()}</span>
-                                            </div>
+                                            <h4 className="text-base font-bold text-white truncate mb-1">
+                                                {bgm.isPending || !bgm.hasUrl ? `${bgm.title} (생성 중...)` : bgm.title}
+                                            </h4>
+                                            {bgm.isPending || !bgm.hasUrl ? (
+                                                <p className="text-xs text-gray-400 mb-2">백그라운드에서 생성 중...</p>
+                                            ) : (
+                                                <>
+                                                    <p className="text-xs text-gray-400 line-clamp-2 mb-2">{bgm.prompt}</p>
+                                                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                                                        <span className="bg-white/5 px-1.5 py-0.5 rounded">{Math.floor(bgm.duration)}s</span>
+                                                        <span>{new Date(bgm.createdAt).toLocaleDateString()}</span>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 mt-auto pt-3 border-t border-white/5">
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="w-full text-xs h-8"
-                                            onClick={() => setSelectedLyrics({ title: bgm.title, content: bgm.prompt })}
-                                        >
-                                            <Mic className="w-3.5 h-3.5 mr-2" />
-                                            가사 보기
-                                        </Button>
-                                    </div>
+                                    {!bgm.isPending && bgm.hasUrl && (
+                                        <div className="flex items-center gap-2 mt-auto pt-3 border-t border-white/5">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="w-full text-xs h-8"
+                                                onClick={() => setSelectedLyrics({ title: bgm.title, content: bgm.prompt })}
+                                            >
+                                                <Mic className="w-3.5 h-3.5 mr-2" />
+                                                가사 보기
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

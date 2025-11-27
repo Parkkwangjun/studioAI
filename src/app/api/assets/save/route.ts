@@ -5,12 +5,16 @@ import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: Request) {
     try {
-        const { type, content, metadata } = await request.json();
+        const { type, content, metadata, projectId } = await request.json();
         // content: base64 string or url
         // type: 'audio' | 'image' | 'video'
 
         if (!content || !type) {
             return NextResponse.json({ error: 'Missing content or type' }, { status: 400 });
+        }
+        
+        if (!projectId) {
+            return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
         }
 
         const cookieStore = await cookies();
@@ -66,10 +70,14 @@ export async function POST(request: Request) {
             .from('assets')
             .insert({
                 user_id: user.id,
+                project_id: projectId,  // ✅ project_id 추가!
                 type: type,
                 url: publicUrl,
                 title: metadata?.title || `Generated ${type}`,
-                metadata: metadata || {}
+                storage_path: metadata?.storagePath || null,
+                scene_number: metadata?.sceneNumber || null,
+                tag: metadata?.tag || null,
+                duration: metadata?.duration || null
             })
             .select()
             .single();

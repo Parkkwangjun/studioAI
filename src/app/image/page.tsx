@@ -1,6 +1,6 @@
 'use client';
 
-import { Image as ImageIcon, Wand2, RefreshCw, Zap, X, Upload, Trash2, Download } from 'lucide-react';
+import { Image as ImageIcon, Wand2, RefreshCw, Zap, X, Upload, Trash2, Download, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '@/store/useProjectStore';
 import toast, { Toaster } from 'react-hot-toast';
@@ -17,121 +17,203 @@ export default function ImagePage() {
 
     // Nano Banana Pro specific states
     const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('1K');
-    const [referenceImages, setReferenceImages] = useState<string[]>([]);
+    const [referenceImages, setReferenceImages] = useState<string[]>([]); // Display URLs (blob)
+    const [referenceImageFiles, setReferenceImageFiles] = useState<File[]>([]); // Actual files for upload
+    const [isUploadingRefs, setIsUploadingRefs] = useState(false);
 
-    // New state to track editable prompts for each scene
-    const [editablePrompts, setEditablePrompts] = useState<{ [key: number]: string }>({});
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [isMigrated, setIsMigrated] = useState(false);
 
     const { currentProject, updateScene, saveCurrentProject, updateProjectInfo, addAsset } = useProjectStore();
     const { falKey, openaiKey } = useSettingsStore();
     const scenes = currentProject?.scenes || [];
 
-    // Initialize editable prompts when scenes load
+    // Initialize image prompts for new scenes (first time only)
     useEffect(() => {
         if (scenes.length > 0) {
-            setEditablePrompts(prev => {
-                const newPrompts = { ...prev };
-                let changed = false;
-                scenes.forEach(scene => {
-                    if (!newPrompts[scene.id]) {
-                        newPrompts[scene.id] = fixedPrompt
-                            ? `${fixedPrompt}, ${scene.text}`
-                            : scene.text;
-                        changed = true;
-                    }
-                });
-                return changed ? newPrompts : prev;
+            let needsSave = false;
+            scenes.forEach(scene => {
+                if (!scene.imagePrompt) {
+                    const initialPrompt = fixedPrompt
+                        ? `${fixedPrompt}, ${scene.text}`
+                        : scene.text;
+                    updateScene(scene.id, { imagePrompt: initialPrompt });
+                    needsSave = true;
+                }
             });
+            if (needsSave) {
+                saveCurrentProject();
+            }
         }
-    }, [scenes]); // Only run when scenes change (new scenes added)
+    }, [scenes.length]); // Only run when number of scenes changes
 
-    // Load state from localStorage when project loads
+    // One-time migration: Load from localStorage and move to Supabase
     useEffect(() => {
-        if (currentProject?.id) {
-            const savedFixed = localStorage.getItem(`fixedPrompt_${currentProject.id}`);
-            if (savedFixed !== null) setFixedPrompt(savedFixed);
-
+        if (currentProject?.id && !isMigrated) {
             const savedEditable = localStorage.getItem(`editablePrompts_${currentProject.id}`);
             if (savedEditable) {
                 try {
                     const parsed = JSON.parse(savedEditable);
-                    setEditablePrompts(prev => ({ ...prev, ...parsed }));
+                    let migrated = false;
+                    
+                    // Move each prompt to Supabase
+                    Object.entries(parsed).forEach(([sceneIdStr, prompt]) => {
+                        const sceneId = parseInt(sceneIdStr);
+                        const scene = scenes.find(s => s.id === sceneId);
+                        if (scene && typeof prompt === 'string') {
+                            updateScene(sceneId, { imagePrompt: prompt });
+                            migrated = true;
+                        }
+                    });
+
+                    if (migrated) {
+                        saveCurrentProject();
+                        // Remove from localStorage after successful migration
+                        localStorage.removeItem(`editablePrompts_${currentProject.id}`);
+                        console.log('✅ Successfully migrated image prompts from localStorage to Supabase');
+                    }
                 } catch (e) {
-                    console.error('Failed to parse saved prompts', e);
+                    console.error('Failed to migrate prompts from localStorage', e);
                 }
             }
+            
+            // Also migrate fixed prompt if exists
+            const savedFixed = localStorage.getItem(`fixedPrompt_${currentProject.id}`);
+            if (savedFixed !== null) {
+                setFixedPrompt(savedFixed);
+                localStorage.removeItem(`fixedPrompt_${currentProject.id}`);
+            }
+            
+            setIsMigrated(true);
         }
-    }, [currentProject?.id]);
-
-    // Save state to localStorage
-    useEffect(() => {
-        if (currentProject?.id) {
-            localStorage.setItem(`fixedPrompt_${currentProject.id}`, fixedPrompt);
-        }
-    }, [fixedPrompt, currentProject?.id]);
-
-    useEffect(() => {
-        if (currentProject?.id) {
-            localStorage.setItem(`editablePrompts_${currentProject.id}`, JSON.stringify(editablePrompts));
-        }
-    }, [editablePrompts, currentProject?.id]);
+    }, [currentProject?.id, scenes.length, isMigrated]);
 
     const handleFixedPromptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newFixed = e.target.value;
         setFixedPrompt(newFixed);
 
         // Sync to all scenes immediately
-        setEditablePrompts(prev => {
-            const newPrompts = { ...prev };
-            scenes.forEach(scene => {
-                newPrompts[scene.id] = newFixed
-                    ? `${newFixed}, ${scene.text}`
-                    : scene.text;
-            });
-            return newPrompts;
+        scenes.forEach(scene => {
+            const newPrompt = newFixed
+                ? `${newFixed}, ${scene.text}`
+                : scene.text;
+            updateScene(scene.id, { imagePrompt: newPrompt });
         });
+        
+        // Auto-save after bulk update
+        saveCurrentProject();
     };
 
     const handlePromptChange = (sceneId: number, newPrompt: string) => {
-        setEditablePrompts(prev => ({
-            ...prev,
-            [sceneId]: newPrompt
-        }));
+        updateScene(sceneId, { imagePrompt: newPrompt });
+        // Note: We don't auto-save on every keystroke to avoid excessive DB writes
+        // Users can manually save or it will save when generating images
     };
 
     const handleReferenceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files && files.length > 0) {
+            const newFiles: File[] = [];
             const newImages: string[] = [];
+            
             Array.from(files).forEach(file => {
                 if (file.type.startsWith('image/')) {
+                    newFiles.push(file);
                     newImages.push(URL.createObjectURL(file));
                 }
             });
-            setReferenceImages(prev => [...prev, ...newImages].slice(0, 8)); // Max 8 images
+            
+            setReferenceImageFiles(prev => [...prev, ...newFiles].slice(0, 8)); // Max 8 images
+            setReferenceImages(prev => [...prev, ...newImages].slice(0, 8));
         }
+        e.target.value = ''; // Reset input
     };
 
     const removeReferenceImage = (index: number) => {
         setReferenceImages(prev => prev.filter((_, i) => i !== index));
+        setReferenceImageFiles(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleGenerateImage = async (sceneId: number) => {
-        const finalPrompt = editablePrompts[sceneId];
+        const scene = scenes.find(s => s.id === sceneId);
+        const finalPrompt = scene?.imagePrompt;
 
         if (!finalPrompt) {
             toast.error('프롬프트가 없습니다');
             return;
         }
+        
+        // Save current prompt before generating
+        await saveCurrentProject();
 
         if (!falKey || !openaiKey) {
             toast.error('설정에서 FAL 및 OpenAI API 키를 먼저 입력해주세요.');
             return;
         }
 
+        if (selectedModel === 'nanobanana' && !useSettingsStore.getState().kieKey) {
+            toast.error('설정에서 KIE API 키를 먼저 입력해주세요.');
+            return;
+        }
+
         setGeneratingIds(prev => new Set(prev).add(sceneId));
+        
+        // Create pending asset immediately (before API call)
+        const tempTag = selectedModel === 'nanobanana' 
+            ? `pending-image:temp-${sceneId}-${Date.now()}` 
+            : `flux-pending:${sceneId}:${Date.now()}`;
+        
+        await addAsset({
+            type: 'image',
+            title: `${finalPrompt.slice(0, 30)}... (생성 중...)`,
+            url: '',
+            tag: tempTag,
+            sceneNumber: sceneId
+        });
+        await saveCurrentProject();
+        
+        let uploadedReferenceUrls: string[] = [];
+
         try {
+            // Upload reference images if using nanobanana model
+            if (selectedModel === 'nanobanana' && referenceImageFiles.length > 0) {
+                setIsUploadingRefs(true);
+                toast.loading(`참조 이미지 업로드 중... (${referenceImageFiles.length}장)`, { id: 'ref-upload' });
+                
+                let uploadedCount = 0;
+                for (let i = 0; i < referenceImageFiles.length; i++) {
+                    const file = referenceImageFiles[i];
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    try {
+                        const uploadRes = await fetch('/api/upload-image', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (uploadRes.ok) {
+                            const { url } = await uploadRes.json();
+                            uploadedReferenceUrls.push(url);
+                            uploadedCount++;
+                            toast.loading(`참조 이미지 업로드 중... (${uploadedCount}/${referenceImageFiles.length})`, { id: 'ref-upload' });
+                        } else {
+                            const errorData = await uploadRes.json();
+                            console.error('Failed to upload reference image:', file.name, errorData);
+                        }
+                    } catch (uploadError) {
+                        console.error('Upload error:', uploadError);
+                    }
+                }
+                
+                if (uploadedReferenceUrls.length === 0) {
+                    throw new Error('참조 이미지 업로드에 실패했습니다. 다시 시도해주세요.');
+                }
+                
+                toast.success(`${uploadedReferenceUrls.length}장의 참조 이미지 업로드 완료`, { id: 'ref-upload' });
+                setIsUploadingRefs(false);
+            }
+
             const response = await fetch('/api/image/generate', {
                 method: 'POST',
                 headers: {
@@ -147,7 +229,9 @@ export default function ImagePage() {
                     model: selectedModel,
                     // Nano Banana Pro params
                     resolution: selectedModel === 'nanobanana' ? resolution : undefined,
-                    referenceImages: selectedModel === 'nanobanana' ? referenceImages : undefined
+                    referenceImages: selectedModel === 'nanobanana' && uploadedReferenceUrls.length > 0 
+                        ? uploadedReferenceUrls 
+                        : undefined
                 }),
             });
 
@@ -158,47 +242,40 @@ export default function ImagePage() {
 
             const data = await response.json();
 
-            let finalImageUrl = data.imageUrl;
-
-            // Handle Polling for Nanobanana
+            // Handle different response types
             if (data.status === 'pending' && data.taskId) {
+                // Nano Banana Pro: Update pending asset with real taskId
                 const taskId = data.taskId;
-                let attempts = 0;
-                const maxAttempts = 60; // 2 minutes max (2s interval)
+                console.log('[AI Tools Image] Task created:', taskId);
+                
+                // Find the temp pending asset and update tag with real taskId
+                const { currentProject: updatedProject, updateAsset } = useProjectStore.getState();
+                const tempPendingAsset = updatedProject?.assets.find(
+                    asset => asset.type === 'image' && asset.tag === tempTag && asset.sceneNumber === sceneId
+                );
 
-                while (attempts < maxAttempts) {
-                    attempts++;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-
-                    // Use the existing image-generation status route or a new one. 
-                    // Since we don't have a dedicated /api/image/status, we can use the one from AI Tools if compatible,
-                    // or better, fetch directly from KIE if we had the key client-side (we don't want to expose it).
-                    // Let's assume we can use /api/image-generation/[taskId] which is generic for KIE tasks.
-                    const statusRes = await fetch(`/api/image-generation/${taskId}`, {
-                        headers: { 'x-kie-key': useSettingsStore.getState().kieKey || '' }
+                if (tempPendingAsset) {
+                    await updateAsset(tempPendingAsset.id, {
+                        tag: `pending-image:${taskId}`
                     });
-                    const statusData = await statusRes.json();
-
-                    if (statusData.data?.state === 'success') {
-                        const resultJson = JSON.parse(statusData.data.resultJson);
-                        // Try multiple paths
-                        finalImageUrl = resultJson.resultUrls?.[0]
-                            || resultJson.url
-                            || resultJson.image_url
-                            || (Array.isArray(resultJson) ? resultJson[0] : null);
-
-                        if (finalImageUrl) break;
-                    } else if (statusData.data?.state === 'fail') {
-                        throw new Error(`Generation failed: ${statusData.data.failMsg}`);
-                    }
+                    await saveCurrentProject();
                 }
 
-                if (!finalImageUrl) throw new Error('Timeout waiting for image generation');
+                toast.success('이미지 생성이 시작되었습니다! 라이브러리에서 진행 상황을 확인하세요.');
+                setGeneratingIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(sceneId);
+                    return next;
+                });
+                return; // Exit early, polling handled by useImagePoller
             }
+
+            // Flux models: Update pending asset with final URL
+            const finalImageUrl = data.imageUrl;
 
             if (!finalImageUrl) throw new Error('No image URL received');
 
-            // Update scene with new image
+            // Update scene with new image immediately
             updateScene(sceneId, { imageUrl: finalImageUrl });
 
             // Update project info (thumbnail & type)
@@ -207,22 +284,62 @@ export default function ImagePage() {
                 thumbnail: finalImageUrl
             });
 
-            // Auto-save to library
-            await addAsset({
-                type: 'image',
-                title: `${currentProject?.title || 'Project'} - Scene ${sceneId}`,
-                url: finalImageUrl,
-                tag: selectedModel,
-                sceneNumber: sceneId
+            // Find the pending asset and update it with final URL
+            const { currentProject: updatedProject, updateAsset } = useProjectStore.getState();
+            const pendingAsset = updatedProject?.assets.find(
+                asset => asset.type === 'image' && asset.tag === tempTag && asset.sceneNumber === sceneId
+            );
+
+            if (pendingAsset) {
+                await updateAsset(pendingAsset.id, {
+                    url: finalImageUrl,
+                    title: `${finalPrompt.slice(0, 50)} - Scene ${sceneId}`,
+                    tag: selectedModel
+                });
+            } else {
+                // Fallback: create new asset if pending asset not found
+                await addAsset({
+                    type: 'image',
+                    title: `${finalPrompt.slice(0, 50)} - Scene ${sceneId}`,
+                    url: finalImageUrl,
+                    tag: selectedModel,
+                    sceneNumber: sceneId
+                });
+            }
+
+            await saveCurrentProject();
+            toast.success('이미지가 생성되어 라이브러리에 저장되었습니다!');
+            
+            setGeneratingIds(prev => {
+                const next = new Set(prev);
+                next.delete(sceneId);
+                return next;
             });
-
-            saveCurrentProject();
-
-            toast.success(`이미지 생성 완료 (${selectedModel === 'dev' ? 'High Quality' : selectedModel === 'schnell' ? 'Fast' : 'Pro'})`);
+            
         } catch (error) {
             console.error('Image generation error:', error);
+            
+            // Remove or mark pending asset as failed
+            const { currentProject: errorProject, deleteAsset, updateAsset } = useProjectStore.getState();
+            const failedPendingAsset = errorProject?.assets.find(
+                asset => asset.type === 'image' && asset.tag === tempTag && asset.sceneNumber === sceneId
+            );
+            
+            if (failedPendingAsset) {
+                if (failedPendingAsset.url) {
+                    // If asset has URL, just mark as failed
+                    await updateAsset(failedPendingAsset.id, {
+                        tag: `error: ${error instanceof Error ? error.message : 'Generation failed'}`,
+                        title: `(실패) ${failedPendingAsset.title}`
+                    });
+                } else {
+                    // If no URL, delete the pending asset
+                    await deleteAsset(failedPendingAsset.id);
+                }
+                await saveCurrentProject();
+            }
+            
             toast.error(`이미지 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        } finally {
             setGeneratingIds(prev => {
                 const next = new Set(prev);
                 next.delete(sceneId);
@@ -233,7 +350,7 @@ export default function ImagePage() {
 
     const handleGenerateAll = async () => {
         let triggeredCount = 0;
-        const scenesToGenerate = scenes.filter(scene => !scene.imageUrl && editablePrompts[scene.id]);
+        const scenesToGenerate = scenes.filter(scene => !scene.imageUrl && scene.imagePrompt);
 
         if (scenesToGenerate.length === 0) {
             toast('생성할 이미지가 없습니다.');
@@ -357,8 +474,8 @@ export default function ImagePage() {
                                     : 'text-(--text-gray) hover:text-white'
                                     }`}
                             >
-                                <Wand2 className="w-3 h-3" />
-                                Nano Banana Pro
+                                <ImageIcon className="w-3 h-3" />
+                                Nano Banana (Img2Img)
                             </button>
                         </div>
 
@@ -404,25 +521,79 @@ export default function ImagePage() {
 
                     {/* Reference Images (Nano Banana Pro Only) */}
                     {selectedModel === 'nanobanana' && (
-                        <div className="flex flex-col gap-2">
-                            <label className="text-[0.8rem] text-(--text-gray)">참조 이미지 (선택사항, 최대 8장)</label>
+                        <div className="flex flex-col gap-3 bg-[#1a1a24] rounded-lg p-4 border border-(--border-color)">
+                            <div className="flex items-center justify-between">
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[0.9rem] font-semibold text-white flex items-center gap-2">
+                                        <ImageIcon className="w-4 h-4" />
+                                        참조 이미지 (Image-to-Image)
+                                    </label>
+                                    <span className="text-[0.75rem] text-(--text-gray)">
+                                        {referenceImages.length > 0 
+                                            ? `${referenceImages.length}장 선택됨 (최대 8장)` 
+                                            : '이미지를 업로드하여 스타일을 참조하세요'}
+                                    </span>
+                                </div>
+                                {referenceImages.length > 0 && (
+                                    <button
+                                        onClick={() => {
+                                            setReferenceImages([]);
+                                            setReferenceImageFiles([]);
+                                        }}
+                                        className="text-xs text-(--text-gray) hover:text-red-400 transition-colors flex items-center gap-1"
+                                    >
+                                        <X className="w-3 h-3" />
+                                        전체 삭제
+                                    </button>
+                                )}
+                            </div>
                             <div className="flex flex-wrap gap-2">
                                 {referenceImages.map((img, idx) => (
-                                    <div key={idx} className="relative w-16 h-16 rounded-md overflow-hidden border border-(--border-color) group">
-                                        <img src={img} alt={`Ref ${idx}`} className="w-full h-full object-cover" />
+                                    <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-(--border-color) group hover:border-(--primary-color) transition-all">
+                                        <img src={img} alt={`참조 ${idx + 1}`} className="w-full h-full object-cover" />
+                                        <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                                            {idx + 1}
+                                        </div>
                                         <button
                                             onClick={() => removeReferenceImage(idx)}
-                                            className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
                                         >
-                                            <Trash2 className="w-4 h-4 text-white" />
+                                            <Trash2 className="w-5 h-5 text-white" />
                                         </button>
                                     </div>
                                 ))}
                                 {referenceImages.length < 8 && (
-                                    <label className="w-16 h-16 rounded-md border border-dashed border-(--border-color) flex items-center justify-center cursor-pointer hover:border-(--primary-color) transition-colors">
-                                        <Upload className="w-4 h-4 text-(--text-gray)" />
-                                        <input type="file" accept="image/*" multiple className="hidden" onChange={handleReferenceImageUpload} />
+                                    <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-(--border-color) flex flex-col items-center justify-center cursor-pointer hover:border-(--primary-color) hover:bg-[#2a2a35] transition-all ${isUploadingRefs ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <Upload className="w-5 h-5 text-(--text-gray) mb-1" />
+                                        <span className="text-[0.65rem] text-(--text-gray)">업로드</span>
+                                        <input 
+                                            type="file" 
+                                            accept="image/jpeg,image/png,image/webp" 
+                                            multiple 
+                                            className="hidden" 
+                                            onChange={handleReferenceImageUpload}
+                                            disabled={isUploadingRefs}
+                                        />
                                     </label>
+                                )}
+                            </div>
+                            <div className="bg-[#252530] rounded-md p-3 border border-(--border-color)">
+                                {referenceImages.length > 0 ? (
+                                    <p className="text-[0.75rem] text-(--text-gray) leading-relaxed">
+                                        💡 <strong className="text-white">참조 이미지 활용 팁:</strong> 업로드한 이미지의 스타일, 구도, 색감을 기반으로 새로운 이미지를 생성합니다. 
+                                        여러 장을 업로드하면 더 풍부한 참조가 가능합니다.
+                                        <br /><br />
+                                        <strong className="text-(--primary-color)">✨ 추천 사용 사례:</strong>
+                                        <br />• 기존 제품 사진의 스타일을 유지하면서 새로운 컨셉 생성
+                                        <br />• 여러 참조 이미지를 결합한 독특한 스타일 합성
+                                        <br />• 브랜드 아이덴티티를 반영한 일관된 비주얼 생성
+                                    </p>
+                                ) : (
+                                    <p className="text-[0.75rem] text-(--text-gray) leading-relaxed">
+                                        💡 <strong className="text-white">참조 이미지는 선택사항입니다.</strong>
+                                        <br />• <strong>참조 이미지 있음:</strong> Image-to-Image 모드로 스타일 합성
+                                        <br />• <strong>참조 이미지 없음:</strong> Text-to-Image 모드로 프롬프트만으로 생성
+                                    </p>
                                 )}
                             </div>
                         </div>
@@ -437,10 +608,24 @@ export default function ImagePage() {
                             onChange={handleFixedPromptChange}
                         />
                     </div>
-                    <p className="text-[0.75rem] text-(--text-gray)">
-                        💡 <strong>{selectedModel === 'dev' ? 'Flux Dev' : selectedModel === 'schnell' ? 'Flux Schnell' : 'Nano Banana Pro'}</strong> 모델이 선택되었습니다.
-                        {selectedModel === 'dev' ? ' 높은 품질의 이미지를 생성하지만 시간이 더 걸릴 수 있습니다.' : selectedModel === 'schnell' ? ' 빠르게 이미지를 생성하며 비용 효율적입니다.' : ' 최신 Nano Banana 모델로 고품질 이미지를 생성합니다. 참조 이미지와 해상도 설정이 가능합니다.'}
-                    </p>
+                    <div className="bg-[#1a1a24] rounded-lg p-3 border border-(--border-color)">
+                        <p className="text-[0.75rem] text-(--text-gray) leading-relaxed">
+                            💡 <strong className="text-white">{selectedModel === 'dev' ? 'Flux Dev' : selectedModel === 'schnell' ? 'Flux Schnell' : 'Nano Banana Pro'}</strong> 모델이 선택되었습니다.
+                            {selectedModel === 'dev' && ' 높은 품질의 이미지를 생성하지만 시간이 더 걸릴 수 있습니다.'}
+                            {selectedModel === 'schnell' && ' 빠르게 이미지를 생성하며 비용 효율적입니다.'}
+                            {selectedModel === 'nanobanana' && (
+                                <>
+                                    <br /><br />
+                                    <strong className="text-(--primary-color)">✨ Image-to-Image 전용 모드</strong>
+                                    <br />
+                                    • 참조 이미지를 업로드하여 스타일, 구도, 색감을 반영한 새로운 이미지 생성<br />
+                                    • 최대 8장의 참조 이미지 지원 (권장: 3~5장)<br />
+                                    • 해상도: 1K (빠름), 2K (균형), 4K (최고 품질)<br />
+                                    • 참조 이미지 없이도 Text-to-Image로 사용 가능
+                                </>
+                            )}
+                        </p>
+                    </div>
                 </div>
             </section>
 
@@ -453,7 +638,7 @@ export default function ImagePage() {
                             <span className="font-bold text-[1rem]">#{scene.id}</span>
                             <button
                                 onClick={() => handleGenerateImage(scene.id)}
-                                disabled={generatingIds.has(scene.id) || !editablePrompts[scene.id]}
+                                disabled={generatingIds.has(scene.id) || !scene.imagePrompt}
                                 className="bg-[#3e3e50] text-[#c0c0c0] border-none px-3 py-1.5 rounded text-[0.8rem] cursor-pointer hover:bg-[#4a4a5c] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
                             >
                                 {generatingIds.has(scene.id) ? (
@@ -491,15 +676,19 @@ export default function ImagePage() {
                                         <div className="relative flex-1">
                                             <textarea
                                                 className="w-full h-full bg-[#1a1a24] rounded-md p-2.5 text-[0.8rem] text-white overflow-y-auto custom-scrollbar font-mono leading-relaxed border border-transparent focus:border-(--primary-color) outline-none resize-none transition-colors"
-                                                value={editablePrompts[scene.id] || ''}
+                                                value={scene.imagePrompt || ''}
                                                 onChange={(e) => handlePromptChange(scene.id, e.target.value)}
+                                                onBlur={() => saveCurrentProject()} // Auto-save on blur
                                                 placeholder="프롬프트를 입력하세요..."
                                             />
                                         </div>
                                         <div className="flex justify-end">
                                             <MagicPromptButton
-                                                prompt={editablePrompts[scene.id] || ''}
-                                                onPromptChange={(newPrompt) => handlePromptChange(scene.id, newPrompt)}
+                                                prompt={scene.imagePrompt || ''}
+                                                onPromptChange={(newPrompt) => {
+                                                    handlePromptChange(scene.id, newPrompt);
+                                                    saveCurrentProject();
+                                                }}
                                                 type="image"
                                                 className="scale-90"
                                             />
@@ -511,7 +700,12 @@ export default function ImagePage() {
                             {/* Preview Section */}
                             <div className="w-[200px] shrink-0">
                                 <div className="w-full h-full bg-[#323242] rounded-lg flex justify-center items-center text-(--text-gray) text-[0.9rem] border border-(--border-color) overflow-hidden relative group">
-                                    {scene.imageUrl ? (
+                                    {generatingIds.has(scene.id) ? (
+                                        <div className="flex flex-col items-center gap-3">
+                                            <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+                                            <span className="text-xs">생성 중...</span>
+                                        </div>
+                                    ) : scene.imageUrl ? (
                                         <>
                                             <img src={scene.imageUrl} alt={`Scene ${scene.id}`} className="w-full h-full object-cover" />
                                             <div

@@ -7,96 +7,54 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Project {
-  id           String   @id @default(uuid())
+model projects {
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id          String   @db.Uuid
+  title            String
+  description      String?
+  thumbnail        String?
+  type             String?
+  merged_audio_url String?
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  scenes scenes[]
+  assets assets[]
+
+  @@map("projects")
+}
+
+model scenes {
+  id           BigInt   @id @default(autoincrement())
+  project_id   String   @db.Uuid
+  scene_order  Int
+  text         String
+  audio_url    String?
+  image_url    String?
+  video_url    String?
+  image_prompt String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@map("scenes")
+}
+
+model assets {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  project_id   String   @db.Uuid
+  user_id      String   @db.Uuid
+  type         String
+  url          String
+  thumbnail    String?
   title        String
-  description  String?
-  platform     String
-  category     String
-  tone         String
-  targetLength String
-  language     String
-  status       String   @default("draft") // draft, in-progress, completed
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  duration     Decimal? @db.Decimal
+  scene_number Int?
+  tag          String?
+  storage_path String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
 
-  scenes       Scene[]
-  imageAssets  ImageAsset[]
-  videoClips   VideoClip[]
-}
+  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
-model Scene {
-  id        String   @id @default(uuid())
-  projectId String
-  index     Int
-  text      String
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  audioClips AudioClip[]
-  imageAssets ImageAsset[]
-}
-
-model AudioClip {
-  id          String   @id @default(uuid())
-  sceneId     String
-  url         String
-  provider    String
-  voiceId     String
-  speed       Float
-  durationSec Float?
-  status      String   @default("pending") // pending, ready, failed
-  error       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  scene       Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
-}
-
-model ImageAsset {
-  id        String   @id @default(uuid())
-  projectId String
-  sceneId   String?
-  url       String
-  prompt    String
-  model     String
-  isMain    Boolean  @default(false)
-  status    String   @default("pending") // pending, ready, failed
-  error     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  scene     Scene?   @relation(fields: [sceneId], references: [id])
-}
-
-model VideoClip {
-  id          String   @id @default(uuid())
-  projectId   String
-  url         String?
-  aspectRatio String
-  durationSec Float?
-  status      String   @default("pending") // pending, rendering, ready, failed
-  error       String?
-  externalTaskId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-}
-
-model Settings {
-  id                String   @id @default(uuid())
-  defaultLanguage   String   @default("ko")
-  defaultTone       String   @default("polite")
-  defaultImageStyle String   @default("cinematic")
-  defaultTtsVoice   String   @default("en-US-Chirp3-HD-Fenrir")
-  scriptModel       String   @default("gemini-1.5-pro")
-  imageModel        String   @default("fal-ai/flux/dev")
-  ttsProvider       String   @default("google")
-  videoProvider     String   @default("kie")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  @@map("assets")
 }

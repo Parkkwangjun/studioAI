@@ -75,7 +75,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     // Female Voices
     {
         id: 'ko-KR-Chirp3-HD-Aoede',
-        name: 'Aoede',
+        name: '지영',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -86,7 +86,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Autonoe',
-        name: 'Autonoe',
+        name: '수진',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -97,7 +97,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Callirrhoe',
-        name: 'Callirrhoe',
+        name: '예진',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -108,7 +108,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Despina',
-        name: 'Despina',
+        name: '민지',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -119,7 +119,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Erinome',
-        name: 'Erinome',
+        name: '소희',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -130,7 +130,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Gacrux',
-        name: 'Gacrux',
+        name: '유진',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -141,7 +141,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Kore',
-        name: 'Kore',
+        name: '서연',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -152,7 +152,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Laomedeia',
-        name: 'Laomedeia',
+        name: '혜원',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -163,7 +163,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Leda',
-        name: 'Leda',
+        name: '채원',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -174,7 +174,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Pulcherrima',
-        name: 'Pulcherrima',
+        name: '다은',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -185,7 +185,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Sulafat',
-        name: 'Sulafat',
+        name: '은지',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -196,7 +196,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Vindemiatrix',
-        name: 'Vindemiatrix',
+        name: '하은',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -207,7 +207,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Zephyr',
-        name: 'Zephyr',
+        name: '지은',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -218,7 +218,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Achernar',
-        name: 'Achernar',
+        name: '현우',
         gender: 'female',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -231,7 +231,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     // Male Voices
     {
         id: 'ko-KR-Chirp3-HD-Achird',
-        name: 'Achird',
+        name: '철수',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -242,7 +242,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Algenib',
-        name: 'Algenib',
+        name: '진만이',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -253,7 +253,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Algieba',
-        name: 'Algieba',
+        name: '경수',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -264,7 +264,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Alnilam',
-        name: 'Alnilam',
+        name: '우빈',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -275,7 +275,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Charon',
-        name: 'Charon',
+        name: '상호',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -286,7 +286,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Enceladus',
-        name: 'Enceladus',
+        name: '민수',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -297,7 +297,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Fenrir',
-        name: 'Fenrir',
+        name: '영수',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -308,7 +308,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Iapetus',
-        name: 'Iapetus',
+        name: '정수',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -319,7 +319,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Orus',
-        name: 'Orus',
+        name: '준호',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -330,7 +330,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Puck',
-        name: 'Puck',
+        name: '태수',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -341,7 +341,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Rasalgethi',
-        name: 'Rasalgethi',
+        name: '동현',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -352,7 +352,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Sadachbia',
-        name: 'Sadachbia',
+        name: '성호',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -363,7 +363,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Sadaltager',
-        name: 'Sadaltager',
+        name: '재현',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -374,7 +374,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Schedar',
-        name: 'Schedar',
+        name: '건우',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -385,7 +385,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Umbriel',
-        name: 'Umbriel',
+        name: '승현',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',
@@ -396,7 +396,7 @@ export const KOREAN_TTS_VOICES: TTSVoice[] = [
     },
     {
         id: 'ko-KR-Chirp3-HD-Zubenelgenubi',
-        name: 'Zubenelgenubi',
+        name: '준영',
         gender: 'male',
         language: '한국어',
         languageCode: 'ko-KR',

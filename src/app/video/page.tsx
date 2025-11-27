@@ -1,6 +1,6 @@
 'use client';
 
-import { PlayCircle, Upload, Wand2, RefreshCw, Image as ImageIcon, Check } from 'lucide-react';
+import { PlayCircle, Upload, Wand2, RefreshCw, Image as ImageIcon, Check, X, Layers } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 
@@ -27,6 +27,10 @@ function VideoPageContent() {
     const [startSceneId, setStartSceneId] = useState<number | null>(null);
     const [endSceneId, setEndSceneId] = useState<number | null>(null);
 
+    // Reference Mode State
+    const [referenceImages, setReferenceImages] = useState<string[]>([]);
+    const [referenceSceneIds, setReferenceSceneIds] = useState<(number | null)[]>([]);
+
     const [prompt, setPrompt] = useState('');
     const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
     const [taskId, setTaskId] = useState<string | null>(null);
@@ -36,7 +40,10 @@ function VideoPageContent() {
         model: 'grok',
         mode: 'normal',
         duration: '5',
-        resolution: '720p'
+        resolution: '720p',
+        aspectRatio: '16:9',
+        seed: '',
+        watermark: ''
     });
 
     const { currentProject, updateScene, saveCurrentProject, updateProjectInfo, addAsset } = useProjectStore();
@@ -82,6 +89,10 @@ function VideoPageContent() {
             toast.error('시작 프레임과 종료 프레임을 모두 선택해주세요');
             return;
         }
+        if (settings.videoType === 'reference' && referenceImages.length === 0) {
+            toast.error('참조 이미지를 최소 1장 이상 선택해주세요 (최대 3장)');
+            return;
+        }
 
         if (!kieKey || !openaiKey) {
             toast.error('설정에서 KIE 및 OpenAI API 키를 먼저 입력해주세요.');
@@ -89,18 +100,20 @@ function VideoPageContent() {
         }
 
         try {
-            const requestBody = settings.videoType === 'image-to-video'
-                ? {
-                    imageUrl: singleImage,
-                    prompt: prompt,
-                    ...settings
-                }
-                : {
-                    startImageUrl: startImage,
-                    endImageUrl: endImage,
-                    prompt: prompt,
-                    ...settings
-                };
+            let requestBody: any = {
+                prompt: prompt,
+                ...settings
+            };
+
+            if (settings.videoType === 'image-to-video') {
+                requestBody.imageUrl = singleImage;
+            } else if (settings.videoType === 'start-end-frame') {
+                requestBody.startImageUrl = startImage;
+                requestBody.endImageUrl = endImage;
+            } else if (settings.videoType === 'reference') {
+                requestBody.imageUrls = referenceImages;
+                requestBody.generationType = 'REFERENCE_2_VIDEO';
+            }
 
             const response = await fetch('/api/video/generate', {
                 method: 'POST',
@@ -125,7 +138,11 @@ function VideoPageContent() {
                 title: `Video - ${new Date().toLocaleTimeString()}`,
                 url: '', // Placeholder
                 tag: `pending:${data.taskId}`,
-                sceneNumber: settings.videoType === 'image-to-video' ? (singleSceneId || undefined) : (startSceneId || undefined)
+                sceneNumber: settings.videoType === 'image-to-video'
+                    ? (singleSceneId || undefined)
+                    : settings.videoType === 'start-end-frame'
+                        ? (startSceneId || undefined)
+                        : (referenceSceneIds[0] || undefined)
             });
 
             saveCurrentProject();
@@ -136,7 +153,7 @@ function VideoPageContent() {
         }
     };
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'single' | 'start' | 'end') => {
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'single' | 'start' | 'end' | 'reference') => {
         const file = e.target.files?.[0];
         if (file) {
             if (!file.type.startsWith('image/')) {
@@ -148,13 +165,6 @@ function VideoPageContent() {
             // Auto-save uploaded image to assets
             if (currentProject) {
                 try {
-                    // In a real app, we would upload the file to storage here and get a permanent URL.
-                    // For now, we'll use the blob URL but note that it won't persist across reloads unless we handle file upload properly.
-                    // Assuming we want to simulate persistence or use a base64/blob for now.
-                    // Ideally, we should use the uploadAssetFromUrl or similar utility if available, or just add it as a local asset.
-                    // Since we don't have the file upload logic fully exposed here, we will add it to assets with the blob URL for the session.
-                    // To make it truly permanent, we'd need to upload to Supabase storage.
-
                     await addAsset({
                         type: 'image',
                         title: file.name,
@@ -174,15 +184,22 @@ function VideoPageContent() {
             } else if (target === 'start') {
                 setStartImage(url);
                 setStartSceneId(null);
-            } else {
+            } else if (target === 'end') {
                 setEndImage(url);
                 setEndSceneId(null);
+            } else if (target === 'reference') {
+                if (referenceImages.length >= 3) {
+                    toast.error('참조 이미지는 최대 3장까지 선택 가능합니다.');
+                    return;
+                }
+                setReferenceImages(prev => [...prev, url]);
+                setReferenceSceneIds(prev => [...prev, null]);
             }
         }
     };
 
     // 드래그 앤 드롭 핸들러
-    const handleDrop = (e: React.DragEvent, target: 'single' | 'start' | 'end') => {
+    const handleDrop = (e: React.DragEvent, target: 'single' | 'start' | 'end' | 'reference') => {
         e.preventDefault();
         const imageUrl = e.dataTransfer.getData('imageUrl');
         const sceneId = e.dataTransfer.getData('sceneId');
@@ -194,11 +211,23 @@ function VideoPageContent() {
             } else if (target === 'start') {
                 setStartImage(imageUrl);
                 setStartSceneId(sceneId ? parseInt(sceneId) : null);
-            } else {
+            } else if (target === 'end') {
                 setEndImage(imageUrl);
                 setEndSceneId(sceneId ? parseInt(sceneId) : null);
+            } else if (target === 'reference') {
+                if (referenceImages.length >= 3) {
+                    toast.error('참조 이미지는 최대 3장까지 선택 가능합니다.');
+                    return;
+                }
+                setReferenceImages(prev => [...prev, imageUrl]);
+                setReferenceSceneIds(prev => [...prev, sceneId ? parseInt(sceneId) : null]);
             }
         }
+    };
+
+    const removeReferenceImage = (index: number) => {
+        setReferenceImages(prev => prev.filter((_, i) => i !== index));
+        setReferenceSceneIds(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -284,7 +313,7 @@ function VideoPageContent() {
                                 )}
                             </div>
                         </div>
-                    ) : (
+                    ) : settings.videoType === 'start-end-frame' ? (
                         /* Start-End Frame UI */
                         <div className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex-1 flex flex-col">
                             <h3 className="text-[0.9rem] font-semibold mb-[15px]">시작 및 종료 프레임 선택</h3>
@@ -369,6 +398,71 @@ function VideoPageContent() {
                                 </div>
                             </div>
                         </div>
+                    ) : (
+                        /* Reference Mode UI */
+                        <div className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex-1 flex flex-col">
+                            <h3 className="text-[0.9rem] font-semibold mb-[15px]">참조 이미지 선택 (1~3장)</h3>
+
+                            <div className="flex-1 bg-[#15151e] border-2 border-dashed border-(--border-color) rounded-lg p-5 flex flex-col items-center justify-center relative overflow-hidden hover:border-(--primary-color) transition-colors min-h-[200px]"
+                                onDrop={(e) => handleDrop(e, 'reference')}
+                                onDragOver={handleDragOver}
+                            >
+                                {referenceImages.length > 0 ? (
+                                    <div className="grid grid-cols-3 gap-4 w-full">
+                                        {referenceImages.map((img, idx) => (
+                                            <div key={idx} className="relative aspect-video rounded-lg overflow-hidden group border border-(--border-color)">
+                                                <img src={img} alt={`Reference ${idx + 1}`} className="w-full h-full object-cover" />
+                                                <button
+                                                    onClick={() => removeReferenceImage(idx)}
+                                                    className="absolute top-1 right-1 bg-black/60 hover:bg-red-500 text-white p-1 rounded-full transition-colors"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                                <div className="absolute bottom-1 left-1 bg-black/60 px-1.5 py-0.5 rounded text-[0.6rem] text-white">
+                                                    Ref {idx + 1}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {referenceImages.length < 3 && (
+                                            <div className="aspect-video rounded-lg border border-dashed border-(--border-color) flex flex-col items-center justify-center cursor-pointer hover:bg-[#1a1a24] transition-colors relative">
+                                                <Upload className="w-5 h-5 text-(--text-gray) mb-1" />
+                                                <span className="text-[0.7rem] text-(--text-gray)">추가</span>
+                                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImageUpload(e, 'reference')} />
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <Layers className="w-10 h-10 text-(--text-gray) mb-3" />
+                                        <p className="text-[0.9rem] text-(--text-gray) mb-1">참조할 이미지를 드래그하거나 업로드하세요</p>
+                                        <p className="text-[0.75rem] text-(--text-gray)">최대 3장까지 선택 가능</p>
+                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImageUpload(e, 'reference')} />
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Scene Images Grid for Selection */}
+                            <div className="mt-4">
+                                <p className="text-[0.75rem] text-(--text-gray) mb-2">라이브러리에서 드래그하여 추가:</p>
+                                <div className="h-[120px] overflow-y-auto custom-scrollbar border border-[#2a2a35] rounded bg-[#16161d] p-2">
+                                    <div className="grid grid-cols-6 gap-2">
+                                        {currentProject?.assets.filter(a => a.type === 'image').map(asset => (
+                                            <div
+                                                key={asset.id}
+                                                draggable
+                                                onDragStart={(e) => {
+                                                    e.dataTransfer.setData('imageUrl', asset.url);
+                                                    e.dataTransfer.setData('sceneId', asset.sceneNumber?.toString() || '');
+                                                }}
+                                                className="aspect-video rounded overflow-hidden cursor-move border border-(--border-color) hover:border-(--primary-color) transition-all"
+                                            >
+                                                <img src={asset.url} alt={asset.title} className="w-full h-full object-cover" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {/* Prompt Section - Restored */}
@@ -385,7 +479,9 @@ function VideoPageContent() {
                             className="w-full h-24 bg-[#15151e] border border-(--border-color) rounded-lg p-3 text-white resize-none outline-none focus:border-(--primary-color) text-sm transition-colors"
                             placeholder={settings.videoType === 'image-to-video'
                                 ? "비디오의 움직임이나 분위기를 설명하세요... (비워두면 AI가 이미지에 맞춰 자동으로 생성합니다)"
-                                : "두 프레임 사이의 전환 과정을 설명하세요... (비워두면 자동으로 자연스러운 전환을 생성합니다)"}
+                                : settings.videoType === 'reference'
+                                    ? "참조 이미지를 바탕으로 생성할 비디오 내용을 설명하세요..."
+                                    : "두 프레임 사이의 전환 과정을 설명하세요... (비워두면 자동으로 자연스러운 전환을 생성합니다)"}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                         ></textarea>
@@ -405,7 +501,8 @@ function VideoPageContent() {
                                 className="w-full bg-(--primary-color) text-white py-3.5 rounded-lg font-semibold hover:bg-[#4a4ddb] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20"
                                 disabled={
                                     (settings.videoType === 'image-to-video' && !singleImage) ||
-                                    (settings.videoType === 'start-end-frame' && (!startImage || !endImage))
+                                    (settings.videoType === 'start-end-frame' && (!startImage || !endImage)) ||
+                                    (settings.videoType === 'reference' && referenceImages.length === 0)
                                 }
                                 onClick={handleGenerateVideo}
                             >

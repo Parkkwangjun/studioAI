@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Music, Image as ImageIcon, Video, Speaker, Radio, Play, Clock, RefreshCw, AlertCircle } from 'lucide-react';
+import { FileText, Music, Image as ImageIcon, Video, Speaker, Radio, Play, Clock, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Asset, AssetType, useProjectStore } from '@/store/useProjectStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -161,8 +161,9 @@ export const AssetCard = React.memo(function AssetCard({ asset, onClick }: Asset
             <div className="aspect-square bg-[#323242] relative overflow-hidden flex items-center justify-center">
                 {isPending && !localError ? (
                     <div className="flex flex-col items-center gap-2 text-(--primary-color)">
-                        <RefreshCw className="w-6 h-6 animate-spin" />
-                        <span className="text-[10px] font-medium text-white">생성 중...</span>
+                        <Loader2 className="w-8 h-8 animate-spin" />
+                        <span className="text-[11px] font-semibold text-white">생성 중...</span>
+                        <span className="text-[9px] text-(--text-gray)">백그라운드에서 진행됩니다</span>
                     </div>
                 ) : isError ? (
                     <div className="flex flex-col items-center gap-2 text-red-400 px-2 text-center">
@@ -171,22 +172,33 @@ export const AssetCard = React.memo(function AssetCard({ asset, onClick }: Asset
                             {localError || asset.tag?.split('error:')[1]}
                         </span>
                     </div>
-                ) : asset.type === 'video' && !asset.thumbnail ? (
+                ) : asset.type === 'video' && !asset.thumbnail && asset.url ? (
                     <video
                         src={asset.url}
                         className="w-full h-full object-cover transition-transform group-hover:scale-105"
                         muted
                         loop
                         playsInline
-                        onMouseOver={e => e.currentTarget.play()}
+                        onMouseOver={e => {
+                            const video = e.currentTarget;
+                            video.play().catch(err => {
+                                if (err.name !== 'AbortError') console.error('Play error:', err);
+                            });
+                        }}
                         onMouseOut={e => e.currentTarget.pause()}
                     />
                 ) : (asset.thumbnail || asset.type === 'image') ? (
-                    <img
-                        src={asset.thumbnail || asset.url}
-                        alt={asset.title}
-                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                    />
+                    (asset.thumbnail || asset.url) ? (
+                        <img
+                            src={asset.thumbnail || asset.url}
+                            alt={asset.title}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-(--text-gray)">
+                            {getIcon(asset.type)}
+                        </div>
+                    )
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-(--text-gray)">
                         {getIcon(asset.type)}

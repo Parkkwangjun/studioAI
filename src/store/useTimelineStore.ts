@@ -401,6 +401,12 @@ export const useTimelineStore = create<TimelineState>()(
                 zoomLevel: state.zoomLevel,
                 snappingEnabled: state.snappingEnabled
             }),
+            // NOTE: Timeline data is persisted to localStorage for undo/redo functionality.
+            // If timeline becomes very large (many clips), consider:
+            // 1. Moving timeline data to Supabase (project-level storage)
+            // 2. Only persisting timeline metadata, not full clips data
+            // 3. Implementing periodic cleanup of old timeline states
+            // Currently this is acceptable as timeline is session-scoped and smaller than prompts.
         }
     )
 );

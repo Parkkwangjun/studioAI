@@ -1,13 +1,16 @@
 'use client';
 
-import { Settings2, Info, Image as ImageIcon, Film } from 'lucide-react';
+import { Settings2, Info, Image as ImageIcon, Film, Layers } from 'lucide-react';
 
 export interface VideoSettingsState {
-    videoType: 'image-to-video' | 'start-end-frame';
-    model: 'grok' | 'bytedance' | 'veo';
+    videoType: 'image-to-video' | 'start-end-frame' | 'reference';
+    model: 'grok' | 'bytedance' | 'veo' | 'veo3' | 'veo3_fast';
     mode: 'normal' | 'fun';
     duration: '5' | '10';
     resolution: '720p' | '1080p';
+    aspectRatio?: '16:9' | '9:16' | 'Auto';
+    seed?: string;
+    watermark?: string;
 }
 
 interface VideoSettingsProps {
@@ -20,11 +23,31 @@ export function VideoSettings({ settings, onSettingsChange }: VideoSettingsProps
         onSettingsChange({ ...settings, [key]: value });
     };
 
-    const handleTypeChange = (type: 'image-to-video' | 'start-end-frame') => {
-        // 타입 변경 시 모델도 자동 변경
-        const newModel = type === 'start-end-frame' ? 'veo' : 'grok';
-        onSettingsChange({ ...settings, videoType: type, model: newModel });
+    const handleTypeChange = (type: 'image-to-video' | 'start-end-frame' | 'reference') => {
+        let newModel = settings.model;
+        if (type === 'start-end-frame') {
+            newModel = 'veo3_fast'; // Default to fast
+        } else if (type === 'reference') {
+            newModel = 'veo3_fast'; // Reference only supports fast
+        } else if (type === 'image-to-video') {
+            newModel = 'grok';
+        }
+
+        // Reset aspect ratio for reference mode as it only supports 16:9 (though API says 16:9, let's keep it safe)
+        const newSettings: VideoSettingsState = {
+            ...settings,
+            videoType: type,
+            model: newModel,
+        };
+
+        if (type === 'reference') {
+            newSettings.aspectRatio = '16:9';
+        }
+
+        onSettingsChange(newSettings);
     };
+
+    const isVeoModel = settings.model === 'veo' || settings.model === 'veo3' || settings.model === 'veo3_fast';
 
     return (
         <div className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color)">
@@ -36,34 +59,42 @@ export function VideoSettings({ settings, onSettingsChange }: VideoSettingsProps
             {/* Video Type Selection */}
             <div className="mb-5">
                 <label className="text-[0.8rem] text-(--text-gray) font-medium mb-2 block">비디오 타입</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                     <button
                         onClick={() => handleTypeChange('image-to-video')}
-                        className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${settings.videoType === 'image-to-video'
+                        className={`p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1.5 ${settings.videoType === 'image-to-video'
                             ? 'border-(--primary-color) bg-(--primary-color)/10'
                             : 'border-(--border-color) hover:border-(--text-gray)'
                             }`}
                     >
-                        <ImageIcon className="w-5 h-5" />
-                        <span className="text-[0.75rem] font-medium">Image-to-Video</span>
-                        <span className="text-[0.65rem] text-(--text-gray)">단일 이미지</span>
+                        <ImageIcon className="w-4 h-4" />
+                        <span className="text-[0.7rem] font-medium">Img2Vid</span>
                     </button>
                     <button
                         onClick={() => handleTypeChange('start-end-frame')}
-                        className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${settings.videoType === 'start-end-frame'
+                        className={`p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1.5 ${settings.videoType === 'start-end-frame'
                             ? 'border-(--primary-color) bg-(--primary-color)/10'
                             : 'border-(--border-color) hover:border-(--text-gray)'
                             }`}
                     >
-                        <Film className="w-5 h-5" />
-                        <span className="text-[0.75rem] font-medium">Start-End Frame</span>
-                        <span className="text-[0.65rem] text-(--text-gray)">시작-끝 장면</span>
+                        <Film className="w-4 h-4" />
+                        <span className="text-[0.7rem] font-medium">Start-End</span>
+                    </button>
+                    <button
+                        onClick={() => handleTypeChange('reference')}
+                        className={`p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1.5 ${settings.videoType === 'reference'
+                            ? 'border-(--primary-color) bg-(--primary-color)/10'
+                            : 'border-(--border-color) hover:border-(--text-gray)'
+                            }`}
+                    >
+                        <Layers className="w-4 h-4" />
+                        <span className="text-[0.7rem] font-medium">Reference</span>
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-5">
-                {/* Model Selection - 타입에 따라 다른 옵션 */}
+            <div className="grid grid-cols-1 gap-4">
+                {/* Model Selection */}
                 <div className="flex flex-col gap-2">
                     <label className="text-[0.8rem] text-(--text-gray) font-medium">모델</label>
                     {settings.videoType === 'image-to-video' ? (
@@ -76,9 +107,15 @@ export function VideoSettings({ settings, onSettingsChange }: VideoSettingsProps
                             <option value="bytedance">Bytedance (Fast/Pro)</option>
                         </select>
                     ) : (
-                        <div className="bg-[#16161d] border border-(--border-color) rounded-lg px-3 py-2.5 text-white text-[0.9rem]">
-                            Veo 3.1
-                        </div>
+                        <select
+                            value={settings.model}
+                            onChange={(e) => handleChange('model', e.target.value)}
+                            disabled={settings.videoType === 'reference'} // Reference mode only supports fast
+                            className="bg-[#16161d] border border-(--border-color) rounded-lg px-3 py-2.5 text-white text-[0.9rem] outline-none focus:border-(--primary-color) transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <option value="veo3_fast">Veo 3.1 Fast (Speed/Cost)</option>
+                            <option value="veo3">Veo 3.1 Quality (High Detail)</option>
+                        </select>
                     )}
                 </div>
 
@@ -95,6 +132,46 @@ export function VideoSettings({ settings, onSettingsChange }: VideoSettingsProps
                             <option value="fun">Fun</option>
                         </select>
                     </div>
+                ) : isVeoModel ? (
+                    <>
+                        {/* Veo Specific Settings */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[0.8rem] text-(--text-gray) font-medium">화면 비율</label>
+                            <select
+                                value={settings.aspectRatio || '16:9'}
+                                onChange={(e) => handleChange('aspectRatio', e.target.value)}
+                                disabled={settings.videoType === 'reference'} // Reference mode limited to 16:9
+                                className="bg-[#16161d] border border-(--border-color) rounded-lg px-3 py-2.5 text-white text-[0.9rem] outline-none focus:border-(--primary-color) transition-colors disabled:opacity-50"
+                            >
+                                <option value="16:9">16:9 (Landscape)</option>
+                                <option value="9:16">9:16 (Portrait)</option>
+                                <option value="Auto">Auto</option>
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[0.8rem] text-(--text-gray) font-medium">Seed (Optional)</label>
+                                <input
+                                    type="number"
+                                    placeholder="Random"
+                                    value={settings.seed || ''}
+                                    onChange={(e) => handleChange('seed', e.target.value)}
+                                    className="bg-[#16161d] border border-(--border-color) rounded-lg px-3 py-2.5 text-white text-[0.9rem] outline-none focus:border-(--primary-color) transition-colors"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[0.8rem] text-(--text-gray) font-medium">Watermark</label>
+                                <input
+                                    type="text"
+                                    placeholder="None"
+                                    value={settings.watermark || ''}
+                                    onChange={(e) => handleChange('watermark', e.target.value)}
+                                    className="bg-[#16161d] border border-(--border-color) rounded-lg px-3 py-2.5 text-white text-[0.9rem] outline-none focus:border-(--primary-color) transition-colors"
+                                />
+                            </div>
+                        </div>
+                    </>
                 ) : (
                     <>
                         <div className="flex flex-col gap-2">
@@ -123,14 +200,18 @@ export function VideoSettings({ settings, onSettingsChange }: VideoSettingsProps
                 )}
             </div>
 
-            <div className="mt-3 flex items-start gap-2 text-[0.75rem] text-(--text-gray) bg-[#1a1a24] p-2.5 rounded-lg">
+            <div className="mt-4 flex items-start gap-2 text-[0.75rem] text-(--text-gray) bg-[#1a1a24] p-3 rounded-lg">
                 <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <p>
                     {settings.videoType === 'image-to-video'
                         ? settings.model === 'grok'
-                            ? 'Grok 모델은 창의적인 움직임에 강점이 있습니다.'
-                            : 'Bytedance 모델은 빠르고 안정적인 영상 생성에 최적화되어 있습니다.'
-                        : 'Veo 3.1 모델은 시작-끝 프레임 사이의 자연스러운 전환 영상을 생성합니다.'}
+                            ? 'Grok: 창의적인 움직임에 강점'
+                            : 'Bytedance: 빠르고 안정적인 생성'
+                        : settings.videoType === 'reference'
+                            ? 'Reference: 1~3장의 이미지를 스타일/캐릭터 참조로 사용하여 영상 생성 (Fast 모델 전용)'
+                            : settings.model === 'veo3'
+                                ? 'Veo 3.1 Quality: 고품질 디테일 (크레딧 소모 큼)'
+                                : 'Veo 3.1 Fast: 빠른 생성 속도 (경제적)'}
                 </p>
             </div>
         </div>

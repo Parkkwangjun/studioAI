@@ -6,6 +6,7 @@ import { ScriptResultModal } from '@/components/script/ScriptResultModal';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { MagicPromptButton } from '@/components/common/MagicPromptButton';
+import toast from 'react-hot-toast';
 
 interface ScriptSettings {
     target: string;
@@ -81,7 +82,7 @@ export default function ScriptPage() {
         if (!prompt.trim()) return;
 
         if (!openaiKey) {
-            alert('설정에서 OpenAI API 키를 먼저 입력해주세요.');
+            toast.warning('설정에서 OpenAI API 키를 먼저 입력해주세요.');
             return;
         }
 
@@ -140,7 +141,7 @@ export default function ScriptPage() {
             setIsModalOpen(true);
         } catch (error) {
             console.error(error);
-            alert('스크립트 생성에 실패했습니다.');
+            toast.error('스크립트 생성에 실패했습니다.');
         } finally {
             setIsGenerating(false);
         }

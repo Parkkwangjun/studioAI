@@ -1,17 +1,15 @@
 import { NextResponse } from 'next/server';
 
+const API_BASE_URL = 'https://api.kie.ai/api/v1/jobs/getTask';
 
-const API_BASE_URL = 'https://api.kie.ai/api/v1/generate/record-info';
-
-export async function GET(request: Request, { params }: { params: Promise<{ taskId: string }> }) {
+export async function GET(request: Request, { params }: { params: { taskId: string } }) {
     const apiKey = request.headers.get('x-kie-key');
-
     if (!apiKey) {
-        return NextResponse.json({ error: 'API Key not configured' }, { status: 401 });
+        return NextResponse.json({ error: 'KIE API key required' }, { status: 401 });
     }
 
     try {
-        const { taskId } = await params;
+        const { taskId } = params;
         if (!taskId) {
             return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
         }
@@ -26,20 +24,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ task
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('BGM API error:', errorText);
+            console.error('[AudioGeneration] KIE API error:', errorText);
             return NextResponse.json({ error: 'Failed to check task status' }, { status: response.status });
         }
 
         const data = await response.json();
-
-        if (data.code !== 200) {
-            return NextResponse.json({ error: data.msg || 'Failed to fetch task status' }, { status: 500 });
-        }
-
         return NextResponse.json(data);
 
     } catch (error) {
-        console.error('Error fetching task status:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        console.error('[AudioGeneration] Error fetching task status:', error);
+        return NextResponse.json({
+            error: 'Failed to check task status',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        }, { status: 500 });
     }
 }
+

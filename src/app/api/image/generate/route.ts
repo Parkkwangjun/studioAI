@@ -106,16 +106,25 @@ export async function POST(request: Request) {
             if (imageSize === "square_hd") aspectRatio = "1:1";
             if (imageSize === "landscape_4_3") aspectRatio = "4:3";
 
-            const payload = {
+            const payload: any = {
                 model: "nano-banana-pro",
                 input: {
                     prompt: optimizedEnglishPrompt,
                     aspect_ratio: aspectRatio,
                     resolution: resolution || "1K",
-                    output_format: "png",
-                    image_input: referenceImages || []
+                    output_format: "png"
                 }
             };
+
+            // Only add image_input if there are reference images
+            if (referenceImages && referenceImages.length > 0) {
+                payload.input.image_input = referenceImages;
+                console.log(`[Nano Banana] Using ${referenceImages.length} reference images`);
+            } else {
+                console.log('[Nano Banana] Text-to-Image mode (no reference images)');
+            }
+
+            console.log('[Nano Banana] Payload:', JSON.stringify(payload, null, 2));
 
             const response = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
                 method: 'POST',

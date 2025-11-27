@@ -3,7 +3,7 @@
 // Actually, I should probably create a reusable Dialog component first if I want to be clean, but for speed, I'll adapt the pattern.
 
 import * as React from 'react';
-import { X, Trash2, Video, Download, ExternalLink, FileText } from 'lucide-react';
+import { X, Trash2, Video, Download, ExternalLink, FileText, Music, Image as ImageIcon } from 'lucide-react';
 import { Asset } from '@/store/useProjectStore';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
@@ -61,18 +61,36 @@ export const AssetDetailModal = React.memo(function AssetDetailModal({ isOpen, o
                     {/* Preview Section */}
                     <div className="flex-1 bg-black flex items-center justify-center p-4 relative">
                         {asset.type === 'image' && (
-                            <img src={asset.url} alt={asset.title} className="max-w-full max-h-full object-contain" />
+                            asset.url ? (
+                                <img src={asset.url} alt={asset.title} className="max-w-full max-h-full object-contain" />
+                            ) : (
+                                <div className="flex flex-col items-center gap-4 text-gray-400">
+                                    <ImageIcon className="w-24 h-24 animate-pulse" />
+                                    <p className="text-sm">이미지 생성 중...</p>
+                                </div>
+                            )
                         )}
                         {asset.type === 'video' && (
-                            <video src={asset.url} controls className="max-w-full max-h-full" />
+                            asset.url ? (
+                                <video src={asset.url} controls className="max-w-full max-h-full" />
+                            ) : (
+                                <div className="flex flex-col items-center gap-4 text-gray-400">
+                                    <Video className="w-24 h-24 animate-pulse" />
+                                    <p className="text-sm">비디오 생성 중...</p>
+                                </div>
+                            )
                         )}
                         {(asset.type === 'audio' || asset.type === 'sfx' || asset.type === 'bgm') && (
                             <div className="w-full max-w-md">
                                 <div className="bg-[#27272a] p-6 rounded-lg flex flex-col items-center gap-4">
                                     <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center text-primary">
-                                        <Video className="w-8 h-8" /> {/* Placeholder icon */}
+                                        <Music className="w-8 h-8" />
                                     </div>
-                                    <audio src={asset.url} controls className="w-full" />
+                                    {asset.url ? (
+                                        <audio src={asset.url} controls className="w-full" />
+                                    ) : (
+                                        <p className="text-sm text-gray-400">오디오 생성 중...</p>
+                                    )}
                                 </div>
                             </div>
                         )}

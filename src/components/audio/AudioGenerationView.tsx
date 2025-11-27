@@ -143,20 +143,26 @@ const SortableSceneItem = memo(function SortableSceneItem({
                             {playingId === scene.id ? <Pause className="w-2 h-2" /> : <Play className="w-2 h-2 ml-0.5" />}
                         </button>
 
-                        {scene.audioUrl ? (
+                        {scene.audioUrl && !scene.audioUrl.startsWith('pending-audio:') ? (
                             <div className="flex-1 h-1 bg-[#2b2b36] rounded-full overflow-hidden">
                                 <div className="h-full bg-(--primary-color) w-[0%]"></div>
                             </div>
+                        ) : scene.audioUrl && scene.audioUrl.startsWith('pending-audio:') ? (
+                            <span className="text-[0.65rem] text-(--text-gray) flex-1">
+                                백그라운드 생성 중...
+                            </span>
                         ) : (
                             <span className="text-[0.65rem] text-(--text-gray) flex-1">
                                 {isGenerating ? '생성 중...' : '오디오 없음'}
                             </span>
                         )}
 
-                        {scene.audioUrl && <span className="text-[0.6rem] text-(--text-gray)">{formatDuration(duration)}</span>}
+                        {scene.audioUrl && !scene.audioUrl.startsWith('pending-audio:') && (
+                            <span className="text-[0.6rem] text-(--text-gray)">{formatDuration(duration)}</span>
+                        )}
 
-                        {/* Hidden Audio Element */}
-                        {scene.audioUrl && (
+                        {/* Hidden Audio Element - only render for actual audio URLs */}
+                        {scene.audioUrl && !scene.audioUrl.startsWith('pending-audio:') && (
                             <audio
                                 ref={(el) => setAudioRef(scene.id, el)}
                                 src={scene.audioUrl}
@@ -216,14 +222,15 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
     const [copiedScene, setCopiedScene] = useState<Scene | null>(null);
     const audioRefs = useRef<{ [key: number]: HTMLAudioElement | null }>({});
+    const handleGenerateAllRef = useRef(false); // 무한 루프 방지
 
     // Merge Progress State
     const [isMerging, setIsMerging] = useState(false);
     const [mergeProgress, setMergeProgress] = useState(0);
     const [mergeStatus, setMergeStatus] = useState('');
 
-    const { updateScene, updateScenes, saveCurrentProject, updateProjectInfo, addAsset } = useProjectStore();
-    const { googleCredentials, kieKey } = useSettingsStore();
+    const { currentProject, updateScene, updateScenes, saveCurrentProject, updateProjectInfo, addAsset } = useProjectStore();
+    const { googleCredentials } = useSettingsStore();
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -368,6 +375,11 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     }, [scenes, addAsset, selectedVoice.name]);
 
     const saveAudioToLibrary = useCallback(async (audioUrl: string, text: string) => {
+        if (!currentProject?.id) {
+            console.warn('No project ID, skipping library save');
+            return;
+        }
+        
         try {
             await fetch('/api/assets/save', {
                 method: 'POST',
@@ -375,17 +387,17 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 body: JSON.stringify({
                     type: 'audio',
                     content: audioUrl,
+                    projectId: currentProject.id,  // ✅ project_id 추가!
                     metadata: {
-                        title: text.slice(0, 20) + (text.length > 20 ? '...' : ''),
-                        description: `Voice: ${selectedVoice.name}, Speed: ${speed}x`,
-                        voiceId: selectedVoice.id
+                        title: text.slice(0, 50) + (text.length > 50 ? '...' : ''),
+                        tag: `${selectedVoice.name} (${speed}x)`
                     }
                 })
             });
         } catch (error) {
             console.error('Background save failed:', error);
         }
-    }, [selectedVoice.name, selectedVoice.id, speed]);
+    }, [currentProject?.id, selectedVoice.name, selectedVoice.id, speed]);
 
     const togglePlay = useCallback((id: number, url?: string) => {
         if (playingId === id) {
@@ -409,19 +421,19 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
         }
     }, [playingId]);
 
-    const handleGenerateAudio = useCallback(async (scene: Scene, silent: boolean = false) => {
+    const handleGenerateAudio = useCallback(async (scene: Scene, silent: boolean = false, background: boolean = false) => {
         if (!scene.text.trim()) {
-            toast.error('텍스트를 입력해주세요.');
+            if (!silent) toast.error('텍스트를 입력해주세요.');
             return;
         }
 
-        setGeneratingIds(prev => new Set(prev).add(scene.id));
-        try {
-            const response = await fetch('/api/audio/generate', {
+        // ✅ 백그라운드 모드: 즉시 요청 전송 후 반환 (페이지 이동 가능)
+        if (background) {
+            // 비동기로 생성 시작 (await 없음)
+            fetch('/api/audio/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-kie-key': kieKey
                 },
                 body: JSON.stringify({
                     text: scene.text,
@@ -429,17 +441,87 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                     speed,
                     pitch,
                     audioEncoding: audioFormat,
-                    provider: 'google',
+                    googleCredentials
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Audio generation error:', data.error);
+                    // 현재 씬 상태 확인 (다른 곳에서 이미 업데이트했을 수 있음)
+                    const currentSceneState = useProjectStore.getState().currentProject?.scenes.find(s => s.id === scene.id);
+                    if (currentSceneState?.audioUrl?.startsWith('pending-audio:')) {
+                        updateScene(scene.id, { audioUrl: undefined });
+                        saveCurrentProject().catch(console.error);
+                    }
+                    return;
+                }
+
+                if (data.audioUrl) {
+                    // 현재 씬 상태 확인 (이미 완료되었거나 다른 곳에서 업데이트했을 수 있음)
+                    const currentSceneState = useProjectStore.getState().currentProject?.scenes.find(s => s.id === scene.id);
+                    // pending 상태이거나 오디오가 없는 경우에만 업데이트 (중복 업데이트 방지)
+                    if (currentSceneState && 
+                        (!currentSceneState.audioUrl || currentSceneState.audioUrl.startsWith('pending-audio:')) &&
+                        !currentSceneState.audioUrl?.startsWith('data:audio')) {
+                        updateScene(scene.id, { audioUrl: data.audioUrl });
+                        saveAudioToLibrary(data.audioUrl, scene.text);
+                        saveCurrentProject().catch(console.error);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Generation error:', error);
+                // 현재 씬 상태 확인
+                const currentSceneState = useProjectStore.getState().currentProject?.scenes.find(s => s.id === scene.id);
+                if (currentSceneState?.audioUrl?.startsWith('pending-audio:')) {
+                    updateScene(scene.id, { audioUrl: undefined });
+                    saveCurrentProject().catch(console.error);
+                }
+            });
+
+            return; // 즉시 반환하여 페이지 이동 가능
+        }
+
+        // ✅ 일반 모드: 완료될 때까지 기다림
+        setGeneratingIds(prev => new Set(prev).add(scene.id));
+        
+        try {
+            const response = await fetch('/api/audio/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    text: scene.text,
+                    voiceId: selectedVoice.id,
+                    speed,
+                    pitch,
+                    audioEncoding: audioFormat,
                     googleCredentials
                 })
             });
 
             const data = await response.json();
+            
+            if (data.error) {
+                toast.error(data.details || data.error);
+                setGeneratingIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(scene.id);
+                    return next;
+                });
+                return;
+            }
+
             if (data.audioUrl) {
                 updateScene(scene.id, { audioUrl: data.audioUrl });
                 saveAudioToLibrary(data.audioUrl, scene.text);
-            } else if (data.error) {
-                toast.error(data.details || data.error);
+                await saveCurrentProject();
+                
+                if (!silent) {
+                    toast.success('오디오가 생성되었습니다.');
+                }
             }
         } catch (error) {
             console.error('Generation error:', error);
@@ -455,7 +537,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 return next;
             });
         }
-    }, [selectedVoice.id, speed, pitch, audioFormat, updateScene, saveAudioToLibrary, googleCredentials, kieKey]);
+    }, [selectedVoice, speed, pitch, audioFormat, updateScene, saveAudioToLibrary, saveCurrentProject, googleCredentials]);
 
     const handleDownload = useCallback((scene: Scene) => {
         if (!scene.audioUrl) return;
@@ -473,14 +555,12 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-kie-key': kieKey
                 },
                 body: JSON.stringify({
                     text: "안녕하세요. 이 목소리는 인공지능이 생성한 목소리입니다. 자연스러운지 확인해 보세요.",
                     voiceId: voice.id,
                     speed: 1.0,
                     pitch: 0,
-                    provider: 'google',
                     googleCredentials
                 })
             });
@@ -498,18 +578,49 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 toast.error('미리듣기 실패');
             }
         }
-    }, [googleCredentials, kieKey]);
+    }, [googleCredentials]);
 
-    const handleGenerateAll = useCallback(async () => {
+    const handleGenerateAll = useCallback(() => {
+        // ✅ 이미 실행 중이면 무시 (무한 루프 방지)
+        if (handleGenerateAllRef.current || isGeneratingAll) {
+            return;
+        }
+
+        const currentScenes = useProjectStore.getState().currentProject?.scenes || [];
+        const scenesToGenerate = currentScenes.filter(scene => 
+            scene.text.trim() && 
+            (!scene.audioUrl || scene.audioUrl.startsWith('pending-audio:'))
+        );
+        
+        if (scenesToGenerate.length === 0) {
+            toast.error('생성할 새로운 오디오가 없습니다.');
+            return;
+        }
+
+        handleGenerateAllRef.current = true; // 실행 중 플래그 설정
         setIsGeneratingAll(true);
-        const promises = scenes
-            .filter(scene => scene.text.trim())
-            .map(scene => handleGenerateAudio(scene, true));
 
-        await Promise.all(promises);
-        setIsGeneratingAll(false);
-        toast.success('전체 오디오 생성이 완료되었습니다.');
-    }, [scenes, handleGenerateAudio]);
+        // ✅ 모든 씬을 pending 상태로 먼저 업데이트
+        scenesToGenerate.forEach(scene => {
+            updateScene(scene.id, { audioUrl: `pending-audio:${scene.id}` });
+        });
+
+        // ✅ 한 번만 저장 (비동기, await 없음)
+        saveCurrentProject().catch(err => console.error('Save error:', err));
+
+        // ✅ 모든 요청을 백그라운드로 시작 (await 없음 - 즉시 반환)
+        scenesToGenerate.forEach(scene => {
+            handleGenerateAudio(scene, true, true); // background: true - 즉시 반환
+        });
+        
+        // ✅ 즉시 완료 상태로 변경 (비동기로 처리되므로)
+        setTimeout(() => {
+            setIsGeneratingAll(false);
+            handleGenerateAllRef.current = false; // 실행 완료 플래그 해제
+        }, 100);
+        
+        toast.success(`${scenesToGenerate.length}개의 오디오 생성이 시작되었습니다. 백그라운드에서 진행됩니다.`);
+    }, [handleGenerateAudio, saveCurrentProject, updateScene, isGeneratingAll]);
 
     return (
         <div className="flex flex-col h-full gap-4 relative">

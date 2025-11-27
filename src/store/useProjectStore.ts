@@ -10,6 +10,7 @@ export interface Scene {
     audioUrl?: string;
     imageUrl?: string;
     videoUrl?: string;
+    imagePrompt?: string; // Image generation prompt (moved from localStorage)
 }
 
 export type AssetType = 'script' | 'audio' | 'image' | 'video' | 'sfx' | 'bgm';
@@ -110,8 +111,17 @@ export const useProjectStore = create<ProjectState>()(
 
             createProject: async (projectData) => {
                 set({ isLoading: true });
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) throw new Error('User not authenticated');
+
+                // ✅ Get current user session
+                const { data: { session }, error: authError } = await supabase.auth.getSession();
+
+                if (authError || !session?.user) {
+                    console.error('User not authenticated:', authError);
+                    set({ isLoading: false });
+                    throw new Error('User not authenticated');
+                }
+
+                const user = session.user;
 
                 const newProject = {
                     user_id: user.id,
@@ -128,7 +138,7 @@ export const useProjectStore = create<ProjectState>()(
                     .single();
 
                 if (error) {
-                    console.error('Error creating project:', error);
+                    console.error('Error creating project:', JSON.stringify(error, null, 2));
                     set({ isLoading: false });
                     throw error;
                 }
@@ -206,7 +216,8 @@ export const useProjectStore = create<ProjectState>()(
                         text: s.text,
                         audioUrl: s.audio_url,
                         imageUrl: s.image_url,
-                        videoUrl: s.video_url
+                        videoUrl: s.video_url,
+                        imagePrompt: s.image_prompt
                     })),
                     assets: assetsData ? assetsData.map(a => ({
                         id: a.id,
@@ -253,7 +264,8 @@ export const useProjectStore = create<ProjectState>()(
                     text: scene.text,
                     audio_url: scene.audioUrl,
                     image_url: scene.imageUrl,
-                    video_url: scene.videoUrl
+                    video_url: scene.videoUrl,
+                    image_prompt: scene.imagePrompt
                 }));
 
                 // Delete existing scenes
@@ -341,7 +353,8 @@ export const useProjectStore = create<ProjectState>()(
                         text: scene.text,
                         audio_url: scene.audio_url,
                         image_url: scene.image_url,
-                        video_url: scene.video_url
+                        video_url: scene.video_url,
+                        image_prompt: scene.image_prompt
                     }));
 
                     await supabase.from('scenes').insert(scenesToInsert);
@@ -460,7 +473,7 @@ export const useProjectStore = create<ProjectState>()(
                     .update({
                         title: updates.title,
                         url: updates.url,
-                        thumbnail: updates.thumbnail,
+                        // thumbnail: updates.thumbnail, // Column does not exist in DB
                         duration: updates.duration,
                         tag: updates.tag,
                         storage_path: updates.storagePath,
@@ -522,7 +535,11 @@ export const useProjectStore = create<ProjectState>()(
         {
             name: 'project-storage', // unique name
             storage: createJSONStorage(() => localStorage),
-            partialize: (state) => ({ currentProject: state.currentProject }), // Only persist currentProject
+            // ✅ Only persist project ID, not entire project (to avoid QuotaExceededError)
+            // The actual project data is stored in Supabase
+            partialize: (state) => ({
+                currentProjectId: state.currentProject?.id
+            }),
         }
     )
 );

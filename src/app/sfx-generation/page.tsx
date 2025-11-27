@@ -7,6 +7,7 @@ import { Loader2, Speaker, Play, Pause, Download, Music, Clock, Sliders } from "
 import { useSettingsStore } from "@/store/useSettingsStore"
 import { useProjectStore } from "@/store/useProjectStore"
 import { MagicPromptButton } from "@/components/common/MagicPromptButton"
+import toast from 'react-hot-toast'
 
 interface GeneratedSfx {
     id: string;
@@ -21,11 +22,32 @@ export default function SfxGenerationPage() {
     const [duration, setDuration] = React.useState("5") // Default 5 seconds
     const [promptInfluence, setPromptInfluence] = React.useState("0.3")
     const [isGenerating, setIsGenerating] = React.useState(false)
-    const [generatedSfx, setGeneratedSfx] = React.useState<GeneratedSfx[]>([])
     const [playingId, setPlayingId] = React.useState<string | null>(null)
     const audioRefs = React.useRef<{ [key: string]: HTMLAudioElement }>({})
     const { kieKey } = useSettingsStore()
     const { addAsset, currentProject, saveCurrentProject } = useProjectStore()
+
+    // Get SFX assets from project library (most recent first)
+    const generatedSfx = React.useMemo(() => {
+        if (!currentProject?.assets) return []
+        
+        return currentProject.assets
+            .filter(asset => asset.type === 'sfx')
+            .map(asset => {
+                const createdAtStr = asset.createdAt || new Date().toISOString()
+                const createdAt = new Date(createdAtStr).getTime() || Date.now()
+                return {
+                    id: asset.id.toString(),
+                    url: asset.url || '',
+                    prompt: asset.title.replace(' (생성 중...)', '').replace('(생성 중...)', ''),
+                    duration: asset.duration || 0,
+                    createdAt: createdAt,
+                    isPending: asset.tag?.startsWith('pending-sfx:') || false,
+                    hasUrl: !!asset.url
+                }
+            })
+            .sort((a, b) => b.createdAt - a.createdAt)
+    }, [currentProject?.assets])
 
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
@@ -51,56 +73,27 @@ export default function SfxGenerationPage() {
 
             const taskId = createData.data.taskId;
 
-            // 2. Poll for Status
-            const pollInterval = setInterval(async () => {
-                try {
-                    const statusRes = await fetch(`/api/sfx-generation/${taskId}`, {
-                        headers: { 'x-kie-key': kieKey || '' }
-                    });
-                    const statusData = await statusRes.json();
+            // Create pending asset immediately
+            if (currentProject) {
+                await addAsset({
+                    type: 'sfx',
+                    title: `${prompt.slice(0, 30)}... (생성 중...)`,
+                    url: '',
+                    tag: `pending-sfx:${taskId}`,
+                    sceneNumber: 0
+                });
+                saveCurrentProject();
+            }
 
-                    if (statusData.data?.state === 'success') {
-                        clearInterval(pollInterval);
-                        const resultJson = JSON.parse(statusData.data.resultJson);
-                        const audioUrl = resultJson.resultUrls[0];
-
-                        const newSfx: GeneratedSfx = {
-                            id: taskId,
-                            url: audioUrl,
-                            prompt: prompt,
-                            duration: parseFloat(duration),
-                            createdAt: Date.now()
-                        };
-
-                        setGeneratedSfx(prev => [newSfx, ...prev]);
-
-                        // Auto-save to library
-                        if (currentProject) {
-                            addAsset({
-                                type: 'audio',
-                                title: `SFX - ${prompt.slice(0, 20)}...`,
-                                url: audioUrl,
-                                tag: 'sfx',
-                                sceneNumber: 0 // Global asset
-                            });
-                            saveCurrentProject();
-                        }
-
-                        setIsGenerating(false);
-                    } else if (statusData.data.state === 'fail') {
-                        clearInterval(pollInterval);
-                        setIsGenerating(false);
-                        alert(`Generation failed: ${statusData.data.failMsg}`);
-                    }
-                } catch (error) {
-                    console.error('Polling error:', error);
-                }
-            }, 2000);
+            toast.success('효과음 생성이 시작되었습니다! 라이브러리에서 진행 상황을 확인하세요.');
+            setIsGenerating(false);
+            setPrompt('');
+            // Polling handled by useAudioTaskPoller
 
         } catch (error) {
             console.error('Generation error:', error);
             setIsGenerating(false);
-            alert('Failed to generate SFX. Please try again.');
+            toast.error('효과음 생성에 실패했습니다. 다시 시도해주세요.');
         }
     };
 
@@ -224,24 +217,38 @@ export default function SfxGenerationPage() {
                             {generatedSfx.map((sfx) => (
                                 <div key={sfx.id} className="flex items-center justify-between p-4 rounded-lg bg-[#262633] border border-[#2a2a35] hover:border-primary transition-colors">
                                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                                        <Button
-                                            size="icon"
-                                            variant="secondary"
-                                            className="rounded-full w-10 h-10 shrink-0"
-                                            onClick={() => togglePlay(sfx.id, sfx.url)}
-                                        >
-                                            {playingId === sfx.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                                        </Button>
+                                        {sfx.isPending || !sfx.hasUrl ? (
+                                            <div className="rounded-full w-10 h-10 shrink-0 flex items-center justify-center bg-primary/20">
+                                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            </div>
+                                        ) : (
+                                            <Button
+                                                size="icon"
+                                                variant="secondary"
+                                                className="rounded-full w-10 h-10 shrink-0"
+                                                onClick={() => togglePlay(sfx.id, sfx.url)}
+                                            >
+                                                {playingId === sfx.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                                            </Button>
+                                        )}
                                         <div className="min-w-0">
-                                            <h4 className="text-sm font-medium text-white truncate">{sfx.prompt}</h4>
-                                            <p className="text-xs text-muted">{sfx.duration}s • {new Date(sfx.createdAt).toLocaleTimeString()}</p>
+                                            <h4 className="text-sm font-medium text-white truncate">
+                                                {sfx.isPending || !sfx.hasUrl ? `${sfx.prompt} (생성 중...)` : sfx.prompt}
+                                            </h4>
+                                            {sfx.isPending || !sfx.hasUrl ? (
+                                                <p className="text-xs text-muted">백그라운드에서 생성 중...</p>
+                                            ) : (
+                                                <p className="text-xs text-muted">{sfx.duration}s • {new Date(sfx.createdAt).toLocaleTimeString()}</p>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 ml-4">
-                                        <Button size="icon" variant="ghost" className="text-gray-400 hover:text-white">
-                                            <Download className="w-4 h-4" />
-                                        </Button>
-                                    </div>
+                                    {!sfx.isPending && sfx.hasUrl && (
+                                        <div className="flex items-center gap-2 ml-4">
+                                            <Button size="icon" variant="ghost" className="text-gray-400 hover:text-white">
+                                                <Download className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

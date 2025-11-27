@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 
-const API_KEY = process.env.ELEVENLABS_API_KEY;
 const API_BASE_URL = 'https://api.kie.ai/api/v1/jobs/recordInfo';
 
 export async function GET(request: Request, { params }: { params: Promise<{ taskId: string }> }) {
     const apiKey = request.headers.get('x-kie-key');
     if (!apiKey) {
-        return NextResponse.json({ error: 'API Key not configured' }, { status: 401 });
+        return NextResponse.json({ error: 'KIE API key required' }, { status: 401 });
     }
 
     try {
@@ -18,20 +17,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ task
         const response = await fetch(`${API_BASE_URL}?taskId=${taskId}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
             }
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-            return NextResponse.json({ error: data.msg || 'Failed to fetch task status' }, { status: response.status });
+            const errorText = await response.text();
+            console.error('KIE API error:', errorText);
+            return NextResponse.json({ error: 'Failed to check task status' }, { status: response.status });
         }
 
+        const data = await response.json();
         return NextResponse.json(data);
 
     } catch (error) {
         console.error('Error fetching task status:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({
+            error: 'Failed to check task status',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        }, { status: 500 });
     }
 }

@@ -49,7 +49,21 @@ Return ONLY the optimized English prompt as a single flowing paragraph. Do NOT o
 
 export async function POST(request: Request) {
     try {
-        const { imageUrl, prompt, model, mode, duration, resolution } = await request.json();
+        const {
+            imageUrl,
+            imageUrls,
+            startImageUrl,
+            endImageUrl,
+            prompt,
+            model,
+            mode,
+            duration,
+            resolution,
+            aspectRatio,
+            seed,
+            watermark,
+            generationType
+        } = await request.json();
 
         const userKieKey = request.headers.get('x-kie-key');
         const userOpenAiKey = request.headers.get('x-openai-key');
@@ -71,16 +85,64 @@ export async function POST(request: Request) {
             const payload: any = {
                 model: model === 'veo' ? 'veo3_fast' : model, // Default to fast if generic 'veo'
                 prompt: optimizedPrompt,
-                aspectRatio: "16:9", // Default
+                aspectRatio: aspectRatio || "16:9", // Default
                 enableTranslation: true
             };
 
-            if (imageUrl) {
-                payload.imageUrls = [imageUrl];
-                payload.generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO";
+            // Add optional parameters if present
+            if (seed) {
+                const seedNum = parseInt(seed);
+                if (isNaN(seedNum) || seedNum < 10000 || seedNum > 99999) {
+                    return NextResponse.json(
+                        { error: 'Seed must be a number between 10000 and 99999' },
+                        { status: 400 }
+                    );
+                }
+                payload.seeds = seedNum;
+            }
+            if (watermark) {
+                payload.watermark = watermark;
+            }
+
+            // Handle images based on generation type or inputs
+            let finalImageUrls: string[] = [];
+
+            if (generationType === 'REFERENCE_2_VIDEO') {
+                // Reference Mode requires images
+                if (!imageUrls || imageUrls.length === 0) {
+                    return NextResponse.json(
+                        { error: 'Reference mode requires at least one image. Please provide imageUrls.' },
+                        { status: 400 }
+                    );
+                }
+                
+                // Reference Mode Specifics
+                payload.generationType = 'REFERENCE_2_VIDEO';
+                payload.model = 'veo3_fast'; // Force fast model for reference
+                payload.aspectRatio = '16:9'; // Force 16:9 for reference
+                finalImageUrls = imageUrls;
+            } else {
+                // Standard Modes (Text-to-Video, Image-to-Video, Start-End)
+                if (imageUrls && imageUrls.length > 0) {
+                    finalImageUrls = imageUrls;
+                } else if (startImageUrl && endImageUrl) {
+                    finalImageUrls = [startImageUrl, endImageUrl];
+                } else if (imageUrl) {
+                    finalImageUrls = [imageUrl];
+                }
+            }
+
+            if (finalImageUrls.length > 0) {
+                payload.imageUrls = finalImageUrls;
+                // If not reference mode, let API auto-detect or default
+                if (generationType !== 'REFERENCE_2_VIDEO') {
+                    // payload.generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO"; // Let API auto-detect
+                }
             } else {
                 payload.generationType = "TEXT_2_VIDEO";
             }
+
+            console.log('Veo Payload:', JSON.stringify(payload, null, 2));
 
             const veoResponse = await fetch('https://api.kie.ai/api/v1/veo/generate', {
                 method: 'POST',
@@ -106,7 +168,7 @@ export async function POST(request: Request) {
                 status: 'pending',
                 originalPrompt: prompt,
                 optimizedPrompt: optimizedPrompt,
-                model: model
+                model: payload.model
             });
 
         } else {
