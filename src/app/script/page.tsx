@@ -82,7 +82,7 @@ export default function ScriptPage() {
         if (!prompt.trim()) return;
 
         if (!openaiKey) {
-            toast.warning('설정에서 OpenAI API 키를 먼저 입력해주세요.');
+            toast.error('설정에서 OpenAI API 키를 먼저 입력해주세요.');
             return;
         }
 

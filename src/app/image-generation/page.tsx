@@ -54,7 +54,7 @@ export default function ImageGenerationPage() {
     const [isGenerating, setIsGenerating] = React.useState(false)
     const [aspectRatio, setAspectRatio] = React.useState("1:1")
     const [selectedModel, setSelectedModel] = React.useState("nanobanana")
-    
+
     // Image-to-Image specific states
     const [referenceImages, setReferenceImages] = React.useState<string[]>([]) // Display URLs
     const [referenceImageFiles, setReferenceImageFiles] = React.useState<File[]>([]) // Files for upload
@@ -86,14 +86,14 @@ export default function ImageGenerationPage() {
         if (files && files.length > 0) {
             const newFiles: File[] = [];
             const newImages: string[] = [];
-            
+
             Array.from(files).forEach(file => {
                 if (file.type.startsWith('image/')) {
                     newFiles.push(file);
                     newImages.push(URL.createObjectURL(file));
                 }
             });
-            
+
             setReferenceImageFiles(prev => [...prev, ...newFiles].slice(0, 8));
             setReferenceImages(prev => [...prev, ...newImages].slice(0, 8));
         }
@@ -107,39 +107,39 @@ export default function ImageGenerationPage() {
 
     const handleImg2ImgGenerate = async () => {
         if (!img2imgPrompt.trim()) {
-            toast.warning('프롬프트를 입력해주세요.');
+            toast.error('프롬프트를 입력해주세요.');
             return;
         }
 
         if (referenceImageFiles.length === 0) {
-            toast.warning('참조 이미지를 최소 1장 이상 업로드해주세요.');
+            toast.error('참조 이미지를 최소 1장 이상 업로드해주세요.');
             return;
         }
 
         setIsGenerating(true);
-        
+
         try {
             // Upload reference images
             setIsUploadingRefs(true);
             const uploadedUrls: string[] = [];
-            
+
             for (const file of referenceImageFiles) {
                 const formData = new FormData();
                 formData.append('file', file);
-                
+
                 const uploadRes = await fetch('/api/upload-image', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 if (uploadRes.ok) {
                     const { url } = await uploadRes.json();
                     uploadedUrls.push(url);
                 }
             }
-            
+
             setIsUploadingRefs(false);
-            
+
             if (uploadedUrls.length === 0) {
                 throw new Error('이미지 업로드에 실패했습니다.');
             }
@@ -169,7 +169,7 @@ export default function ImageGenerationPage() {
             if (createData.status === 'pending' && createData.taskId) {
                 const taskId = createData.taskId;
                 console.log('[Img2Img] Task created:', taskId);
-                
+
                 await addAsset({
                     type: 'image',
                     title: `${img2imgPrompt.slice(0, 30)}... (생성 중...)`,
@@ -222,17 +222,17 @@ export default function ImageGenerationPage() {
             if (createData.status === 'pending' && createData.taskId) {
                 const taskId = createData.taskId;
                 console.log('[Text2Img] Task created:', taskId);
-                
-                                    await addAsset({
-                                        type: 'image',
+
+                await addAsset({
+                    type: 'image',
                     title: `${prompt.slice(0, 30)}... (생성 중...)`,
                     url: '',
                     tag: `pending-image:${taskId}`,
-                                        sceneNumber: 0
-                                    });
+                    sceneNumber: 0
+                });
 
                 toast.success('이미지 생성이 시작되었습니다! 라이브러리에서 진행 상황을 확인하세요.');
-                            setIsGenerating(false);
+                setIsGenerating(false);
                 setPrompt('');
                 return; // Exit early, polling handled by useImagePoller
             }
@@ -423,7 +423,7 @@ export default function ImageGenerationPage() {
                                     </button>
                                 )}
                             </div>
-                            
+
                             <div className="flex flex-wrap gap-2">
                                 {referenceImages.map((img, idx) => (
                                     <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-border group hover:border-primary transition-all">
@@ -443,11 +443,11 @@ export default function ImageGenerationPage() {
                                     <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-white/5 transition-all ${isUploadingRefs ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                         <Upload className="w-5 h-5 text-muted mb-1" />
                                         <span className="text-[0.65rem] text-muted">추가</span>
-                            <input
-                                type="file"
-                                            accept="image/jpeg,image/png,image/webp" 
-                                            multiple 
-                                className="hidden"
+                                        <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            multiple
+                                            className="hidden"
                                             onChange={handleReferenceImageUpload}
                                             disabled={isUploadingRefs}
                                         />
@@ -521,8 +521,8 @@ export default function ImageGenerationPage() {
                         </div>
 
                         {/* Generate Button */}
-                        <Button 
-                            className="w-full h-12 text-lg font-semibold" 
+                        <Button
+                            className="w-full h-12 text-lg font-semibold"
                             size="lg"
                             onClick={handleImg2ImgGenerate}
                             disabled={isGenerating || !img2imgPrompt.trim() || referenceImages.length === 0}
@@ -534,7 +534,7 @@ export default function ImageGenerationPage() {
                                 </>
                             ) : (
                                 <>
-                            <Wand2 className="w-5 h-5 mr-2" />
+                                    <Wand2 className="w-5 h-5 mr-2" />
                                     이미지 생성하기
                                 </>
                             )}
