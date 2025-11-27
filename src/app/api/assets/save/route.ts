@@ -69,7 +69,6 @@ export async function POST(request: Request) {
                 type: type,
                 url: publicUrl,
                 title: metadata?.title || `Generated ${type}`,
-                description: metadata?.description || '',
                 metadata: metadata || {}
             })
             .select()

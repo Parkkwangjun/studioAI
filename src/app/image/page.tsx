@@ -12,7 +12,7 @@ import { saveAs } from 'file-saver';
 export default function ImagePage() {
     const [fixedPrompt, setFixedPrompt] = useState('high quality, professional photography, 8k resolution, detailed, cinematic lighting, vibrant colors');
     const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
-    const [selectedModel, setSelectedModel] = useState<'dev' | 'schnell' | 'nanobanana'>('dev');
+    const [selectedModel, setSelectedModel] = useState<'dev' | 'schnell' | 'nanobanana'>('schnell');
     const [imageSize, setImageSize] = useState<string>('landscape_16_9');
 
     // Nano Banana Pro specific states
@@ -27,22 +27,71 @@ export default function ImagePage() {
     const { falKey, openaiKey } = useSettingsStore();
     const scenes = currentProject?.scenes || [];
 
-    // Initialize editable prompts when scenes load or fixedPrompt changes
+    // Initialize editable prompts when scenes load
     useEffect(() => {
         if (scenes.length > 0) {
             setEditablePrompts(prev => {
                 const newPrompts = { ...prev };
+                let changed = false;
                 scenes.forEach(scene => {
                     if (!newPrompts[scene.id]) {
                         newPrompts[scene.id] = fixedPrompt
                             ? `${fixedPrompt}, ${scene.text}`
                             : scene.text;
+                        changed = true;
                     }
                 });
-                return newPrompts;
+                return changed ? newPrompts : prev;
             });
         }
-    }, [scenes, fixedPrompt]);
+    }, [scenes]); // Only run when scenes change (new scenes added)
+
+    // Load state from localStorage when project loads
+    useEffect(() => {
+        if (currentProject?.id) {
+            const savedFixed = localStorage.getItem(`fixedPrompt_${currentProject.id}`);
+            if (savedFixed !== null) setFixedPrompt(savedFixed);
+
+            const savedEditable = localStorage.getItem(`editablePrompts_${currentProject.id}`);
+            if (savedEditable) {
+                try {
+                    const parsed = JSON.parse(savedEditable);
+                    setEditablePrompts(prev => ({ ...prev, ...parsed }));
+                } catch (e) {
+                    console.error('Failed to parse saved prompts', e);
+                }
+            }
+        }
+    }, [currentProject?.id]);
+
+    // Save state to localStorage
+    useEffect(() => {
+        if (currentProject?.id) {
+            localStorage.setItem(`fixedPrompt_${currentProject.id}`, fixedPrompt);
+        }
+    }, [fixedPrompt, currentProject?.id]);
+
+    useEffect(() => {
+        if (currentProject?.id) {
+            localStorage.setItem(`editablePrompts_${currentProject.id}`, JSON.stringify(editablePrompts));
+        }
+    }, [editablePrompts, currentProject?.id]);
+
+    const handleFixedPromptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newFixed = e.target.value;
+        setFixedPrompt(newFixed);
+
+        // Sync to all scenes immediately
+        setEditablePrompts(prev => {
+            const newPrompts = { ...prev };
+            scenes.forEach(scene => {
+                newPrompts[scene.id] = newFixed
+                    ? `${newFixed}, ${scene.text}`
+                    : scene.text;
+            });
+            return newPrompts;
+        });
+    };
 
     const handlePromptChange = (sceneId: number, newPrompt: string) => {
         setEditablePrompts(prev => ({
@@ -282,16 +331,6 @@ export default function ImagePage() {
                         {/* Model Selector */}
                         <div className="flex bg-[#16161d] p-1 rounded-lg border border-(--border-color)">
                             <button
-                                onClick={() => setSelectedModel('dev')}
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'dev'
-                                    ? 'bg-(--primary-color) text-white shadow-sm'
-                                    : 'text-(--text-gray) hover:text-white'
-                                    }`}
-                            >
-                                <Wand2 className="w-3 h-3" />
-                                Flux Dev (Quality)
-                            </button>
-                            <button
                                 onClick={() => setSelectedModel('schnell')}
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'schnell'
                                     ? 'bg-(--primary-color) text-white shadow-sm'
@@ -300,6 +339,16 @@ export default function ImagePage() {
                             >
                                 <Zap className="w-3 h-3" />
                                 Flux Schnell (Fast)
+                            </button>
+                            <button
+                                onClick={() => setSelectedModel('dev')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'dev'
+                                    ? 'bg-(--primary-color) text-white shadow-sm'
+                                    : 'text-(--text-gray) hover:text-white'
+                                    }`}
+                            >
+                                <Wand2 className="w-3 h-3" />
+                                Flux Dev (Quality)
                             </button>
                             <button
                                 onClick={() => setSelectedModel('nanobanana')}
@@ -385,7 +434,7 @@ export default function ImagePage() {
                             className="flex-1 bg-[#16161d] border border-(--border-color) rounded-lg px-4 py-2.5 text-white outline-none focus:border-(--primary-color) text-[0.9rem] transition-colors"
                             placeholder="고정 프롬프트 입력 (예: high quality, professional photography, 8k resolution)"
                             value={fixedPrompt}
-                            onChange={(e) => setFixedPrompt(e.target.value)}
+                            onChange={handleFixedPromptChange}
                         />
                     </div>
                     <p className="text-[0.75rem] text-(--text-gray)">

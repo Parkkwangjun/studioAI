@@ -38,7 +38,7 @@ interface AudioGenerationViewProps {
 interface SortableSceneItemProps {
     scene: Scene;
     playingId: number | null;
-    generatingId: number | null;
+    isGenerating: boolean;
     isGeneratingAll: boolean;
     togglePlay: (id: number, url?: string) => void;
     handleGenerateAudio: (scene: Scene) => void;
@@ -54,7 +54,7 @@ interface SortableSceneItemProps {
 const SortableSceneItem = memo(function SortableSceneItem({
     scene,
     playingId,
-    generatingId,
+    isGenerating,
     isGeneratingAll,
     togglePlay,
     handleGenerateAudio,
@@ -136,7 +136,7 @@ const SortableSceneItem = memo(function SortableSceneItem({
                     <div className="flex-1 h-7 bg-[#15151e] rounded-full border border-(--border-color) flex items-center px-2 gap-2">
                         <button
                             onClick={() => togglePlay(scene.id, scene.audioUrl)}
-                            disabled={!scene.audioUrl && !generatingId}
+                            disabled={!scene.audioUrl && !isGenerating}
                             className={`w-4 h-4 rounded-full flex items-center justify-center text-white transition-transform ${scene.audioUrl ? 'bg-(--primary-color) hover:scale-105' : 'bg-[#2b2b36] cursor-not-allowed'
                                 }`}
                         >
@@ -149,7 +149,7 @@ const SortableSceneItem = memo(function SortableSceneItem({
                             </div>
                         ) : (
                             <span className="text-[0.65rem] text-(--text-gray) flex-1">
-                                {generatingId === scene.id ? '생성 중...' : '오디오 없음'}
+                                {isGenerating ? '생성 중...' : '오디오 없음'}
                             </span>
                         )}
 
@@ -177,11 +177,11 @@ const SortableSceneItem = memo(function SortableSceneItem({
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); handleGenerateAudio(scene); }}
-                            disabled={generatingId === scene.id || isGeneratingAll}
+                            disabled={isGenerating || isGeneratingAll}
                             className="p-1.5 rounded-md hover:bg-white/5 text-(--text-gray) hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="생성/재생성"
                         >
-                            <RefreshCw className={`w-3 h-3 ${generatingId === scene.id ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(scene); }}
@@ -207,15 +207,20 @@ const SortableSceneItem = memo(function SortableSceneItem({
 
 export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     const [playingId, setPlayingId] = useState<number | null>(null);
-    const [generatingId, setGeneratingId] = useState<number | null>(null);
+    const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
     const [selectedVoice, setSelectedVoice] = useState<TTSVoice>(getDefaultVoice());
     const [speed, setSpeed] = useState(1.0);
     const [pitch, setPitch] = useState(0);
-    const [audioFormat, setAudioFormat] = useState('MP3'); // New State
+    const [audioFormat, setAudioFormat] = useState('MP3');
     const [isGeneratingAll, setIsGeneratingAll] = useState(false);
     const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
     const [copiedScene, setCopiedScene] = useState<Scene | null>(null);
     const audioRefs = useRef<{ [key: number]: HTMLAudioElement | null }>({});
+
+    // Merge Progress State
+    const [isMerging, setIsMerging] = useState(false);
+    const [mergeProgress, setMergeProgress] = useState(0);
+    const [mergeStatus, setMergeStatus] = useState('');
 
     const { updateScene, updateScenes, saveCurrentProject, updateProjectInfo, addAsset } = useProjectStore();
     const { googleCredentials, kieKey } = useSettingsStore();
@@ -246,7 +251,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     // Keyboard Shortcuts for Copy/Paste
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Check if user is typing in an input or textarea
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
                 return;
             }
@@ -293,7 +297,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     }, [scenes, updateScenes, selectedSceneId]);
 
     const handleSaveToLibrary = useCallback(async () => {
-        // 오디오가 없는 scene 확인
         const scenesWithAudio = scenes.filter(scene => scene.audioUrl);
 
         if (scenesWithAudio.length === 0) {
@@ -301,10 +304,22 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
             return;
         }
 
-        try {
-            toast.loading('오디오를 병합하고 라이브러리에 저장 중...', { id: 'save-library' });
+        let progressInterval: NodeJS.Timeout;
 
-            // API 호출하여 오디오 병합
+        try {
+            setIsMerging(true);
+            setMergeStatus('오디오 클립을 병합하는 중입니다...');
+            setMergeProgress(0);
+
+            // Fake progress for better UX
+            progressInterval = setInterval(() => {
+                setMergeProgress(prev => {
+                    if (prev >= 90) return prev;
+                    const increment = Math.floor(Math.random() * 4) + 2;
+                    return Math.min(prev + increment, 90);
+                });
+            }, 800);
+
             const response = await fetch('/api/audio/merge', {
                 method: 'POST',
                 headers: {
@@ -322,7 +337,10 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 throw new Error(data.error || '오디오 병합 실패');
             }
 
-            // 병합된 오디오를 에셋으로 저장
+            clearInterval(progressInterval);
+            setMergeProgress(95);
+            setMergeStatus('라이브러리에 저장하는 중입니다...');
+
             await addAsset({
                 type: 'audio',
                 url: data.audioUrl,
@@ -331,10 +349,21 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 tag: `Voice: ${selectedVoice.name}`
             });
 
+            setMergeProgress(100);
+            setMergeStatus('완료되었습니다!');
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
             toast.success('오디오가 라이브러리에 저장되었습니다.', { id: 'save-library' });
         } catch (error) {
             console.error('Library save error:', error);
             toast.error('라이브러리 저장에 실패했습니다.', { id: 'save-library' });
+        } finally {
+            if (progressInterval!) clearInterval(progressInterval);
+            setTimeout(() => {
+                setIsMerging(false);
+                setMergeProgress(0);
+            }, 1000);
         }
     }, [scenes, addAsset, selectedVoice.name]);
 
@@ -386,7 +415,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
             return;
         }
 
-        setGeneratingId(scene.id);
+        setGeneratingIds(prev => new Set(prev).add(scene.id));
         try {
             const response = await fetch('/api/audio/generate', {
                 method: 'POST',
@@ -399,7 +428,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                     voiceId: selectedVoice.id,
                     speed,
                     pitch,
-                    audioEncoding: audioFormat, // Added
+                    audioEncoding: audioFormat,
                     provider: 'google',
                     googleCredentials
                 })
@@ -408,8 +437,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
             const data = await response.json();
             if (data.audioUrl) {
                 updateScene(scene.id, { audioUrl: data.audioUrl });
-
-                // Background save
                 saveAudioToLibrary(data.audioUrl, scene.text);
             } else if (data.error) {
                 toast.error(data.details || data.error);
@@ -422,7 +449,11 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 toast.error('오디오 생성 실패');
             }
         } finally {
-            setGeneratingId(null);
+            setGeneratingIds(prev => {
+                const next = new Set(prev);
+                next.delete(scene.id);
+                return next;
+            });
         }
     }, [selectedVoice.id, speed, pitch, audioFormat, updateScene, saveAudioToLibrary, googleCredentials, kieKey]);
 
@@ -472,7 +503,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     const handleGenerateAll = useCallback(async () => {
         setIsGeneratingAll(true);
         const promises = scenes
-            .filter(scene => scene.text.trim() && !scene.audioUrl)
+            .filter(scene => scene.text.trim())
             .map(scene => handleGenerateAudio(scene, true));
 
         await Promise.all(promises);
@@ -481,7 +512,36 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     }, [scenes, handleGenerateAudio]);
 
     return (
-        <div className="flex flex-col h-full gap-4">
+        <div className="flex flex-col h-full gap-4 relative">
+            {isMerging && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                    <div className="bg-[#1e1e29] p-8 rounded-2xl border border-[#2a2a35] w-[450px] flex flex-col gap-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                        <div className="flex flex-col gap-2 text-center">
+                            <h3 className="text-xl font-bold text-white">오디오 처리 중</h3>
+                            <p className="text-sm text-gray-400">{mergeStatus}</p>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <div className="flex justify-end">
+                                <span className="text-sm font-bold text-(--primary-color)">{mergeProgress}%</span>
+                            </div>
+                            <div className="w-full h-3 bg-[#2b2b36] rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-(--primary-color) transition-all duration-300 ease-out shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                                    style={{ width: `${mergeProgress}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-center">
+                            <p className="text-xs text-yellow-200/80">
+                                ⚠️ 작업이 완료될 때까지 페이지를 이동하거나 닫지 마세요.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-(--bg-card) p-3 rounded-xl border border-(--border-color)">
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="text-[0.85rem] font-semibold text-white flex items-center gap-2">
@@ -498,7 +558,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 </div>
 
                 <div className="grid grid-cols-4 gap-4">
-                    {/* Voice Selection */}
                     <div className="flex flex-col gap-1.5 col-span-1">
                         <label className="text-[0.7rem] text-(--text-gray) font-medium">음성 선택</label>
                         <VoiceSelector
@@ -508,7 +567,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                         />
                     </div>
 
-                    {/* Speed Control */}
                     <div className="flex flex-col gap-1.5 col-span-1">
                         <label className="text-[0.7rem] text-(--text-gray) font-medium">
                             속도: {speed.toFixed(1)}x
@@ -526,7 +584,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                         </div>
                     </div>
 
-                    {/* Pitch Control */}
                     <div className="flex flex-col gap-1.5 col-span-1">
                         <label className="text-[0.7rem] text-(--text-gray) font-medium">
                             피치: {pitch > 0 ? '+' : ''}{pitch.toFixed(1)}
@@ -544,7 +601,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                         </div>
                     </div>
 
-                    {/* Format Selector */}
                     <div className="flex flex-col gap-1.5 col-span-1">
                         <label className="text-[0.7rem] text-(--text-gray) font-medium">오디오 포맷</label>
                         <select
@@ -560,12 +616,11 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                         </select>
                     </div>
 
-                    {/* Generate All Button */}
                     <div className="flex flex-col gap-1.5 col-span-1">
                         <label className="text-[0.7rem] text-(--text-gray) font-medium">일괄 작업</label>
                         <button
                             onClick={handleGenerateAll}
-                            disabled={isGeneratingAll || generatingId !== null}
+                            disabled={isGeneratingAll || generatingIds.size > 0}
                             className="h-[38px] bg-(--primary-color) text-white rounded-lg hover:bg-[#4a4ddb] transition-colors flex items-center justify-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed text-xs w-full"
                         >
                             <Wand2 className={`w-3.5 h-3.5 ${isGeneratingAll ? 'animate-spin' : ''}`} />
@@ -573,10 +628,9 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                         </button>
                     </div>
                 </div>
-            </div >
+            </div>
 
-            {/* Scene List */}
-            < div className="flex-1 overflow-y-auto custom-scrollbar pr-2" >
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
@@ -592,7 +646,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                                     key={scene.id}
                                     scene={scene}
                                     playingId={playingId}
-                                    generatingId={generatingId}
+                                    isGenerating={generatingIds.has(scene.id)}
                                     isGeneratingAll={isGeneratingAll}
                                     togglePlay={togglePlay}
                                     handleGenerateAudio={handleGenerateAudio}
@@ -608,7 +662,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                         </div>
                     </SortableContext>
                 </DndContext>
-            </div >
-        </div >
+            </div>
+        </div>
     );
 }
