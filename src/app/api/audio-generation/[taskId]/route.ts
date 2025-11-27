@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 
 const API_BASE_URL = 'https://api.kie.ai/api/v1/jobs/getTask';
 
-export async function GET(request: Request, { params }: { params: { taskId: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ taskId: string }> }) {
     const apiKey = request.headers.get('x-kie-key');
     if (!apiKey) {
         return NextResponse.json({ error: 'KIE API key required' }, { status: 401 });
     }
 
     try {
-        const { taskId } = params;
+        const { taskId } = await params;
         if (!taskId) {
             return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
         }
