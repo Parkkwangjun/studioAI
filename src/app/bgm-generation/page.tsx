@@ -148,11 +148,11 @@ export default function BgmGenerationPage() {
     };
 
     return (
-        <div className="flex h-full gap-6 p-6">
+        <div className="flex h-full gap-6 p-[30px_40px]">
             {/* Left Panel - Controls */}
             <div className="w-[400px] shrink-0 flex flex-col gap-6 overflow-y-auto px-2">
                 <div>
-                    <h1 className="text-2xl font-bold text-white mb-2">AI 배경음악 생성</h1>
+                    <h1 className="text-[1.2rem] font-semibold text-white mb-2">AI 배경음악 생성</h1>
                     <p className="text-sm text-muted">원하는 분위기의 음악을 작곡하세요.</p>
                 </div>
 

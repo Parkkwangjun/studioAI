@@ -70,73 +70,7 @@ function VideoPageContent() {
         }
     }, [scenes, singleImage, settings.videoType, searchParams]);
 
-    // Polling for video generation status
-    useEffect(() => {
-        let isMounted = true;
-        let timeoutId: NodeJS.Timeout;
-
-        const checkStatus = async (currentInterval: number) => {
-            if (!taskId || generatedVideo) return;
-
-            try {
-                const res = await fetch(`/api/video/status?taskId=${taskId}`, {
-                    headers: {
-                        'x-kie-key': kieKey || ''
-                    }
-                });
-                const data = await res.json();
-
-                if (!isMounted) return;
-
-                if (data.status === 'completed') {
-                    setGeneratedVideo(data.videoUrl);
-                    setTaskId(null);
-
-                    // Auto-save logic
-                    if (settings.videoType === 'image-to-video' && singleSceneId) {
-                        updateScene(singleSceneId, { videoUrl: data.videoUrl });
-                    } else if (settings.videoType === 'start-end-frame' && startSceneId) {
-                        updateScene(startSceneId, { videoUrl: data.videoUrl });
-                    }
-                    updateProjectInfo({ type: 'video', thumbnail: data.videoUrl });
-
-                    // Auto-save to library
-                    addAsset({
-                        type: 'video',
-                        title: `${currentProject?.title || 'Project'} - Video`,
-                        url: data.videoUrl,
-                        tag: settings.model,
-                        sceneNumber: singleSceneId || startSceneId || undefined
-                    });
-
-                    saveCurrentProject();
-                    toast.success('비디오가 생성되어 저장되었습니다!');
-                } else if (data.status === 'failed') {
-                    toast.error(`비디오 생성 실패: ${data.error}`);
-                    setTaskId(null);
-                } else {
-                    // Still pending, schedule next check
-                    // Adaptive: increase interval up to 5s
-                    const nextInterval = Math.min(currentInterval + 500, 5000);
-                    timeoutId = setTimeout(() => checkStatus(nextInterval), nextInterval);
-                }
-            } catch (error) {
-                console.error('Polling error:', error);
-                // Retry on error with max interval
-                timeoutId = setTimeout(() => checkStatus(5000), 5000);
-            }
-        };
-
-        if (taskId && !generatedVideo) {
-            // Start with fast polling
-            checkStatus(1000);
-        }
-
-        return () => {
-            isMounted = false;
-            clearTimeout(timeoutId);
-        };
-    }, [taskId, generatedVideo, singleSceneId, startSceneId, settings.videoType, updateScene, saveCurrentProject, updateProjectInfo, kieKey]);
+    // Polling effect removed
 
     const handleGenerateVideo = async () => {
         // Validation
@@ -184,8 +118,18 @@ function VideoPageContent() {
             }
 
             const data = await response.json();
-            setTaskId(data.taskId);
-            toast.success('비디오 생성이 시작되었습니다...');
+
+            // Add pending asset to library
+            await addAsset({
+                type: 'video',
+                title: `Video - ${new Date().toLocaleTimeString()}`,
+                url: '', // Placeholder
+                tag: `pending:${data.taskId}`,
+                sceneNumber: settings.videoType === 'image-to-video' ? (singleSceneId || undefined) : (startSceneId || undefined)
+            });
+
+            saveCurrentProject();
+            toast.success('비디오 생성이 시작되었습니다. 라이브러리에서 진행 상황을 확인할 수 있습니다.');
         } catch (error) {
             console.error('Video generation error:', error);
             toast.error(`생성 시작 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
@@ -275,45 +219,47 @@ function VideoPageContent() {
                 <section className="col-span-2 flex flex-col gap-5">
                     {settings.videoType === 'image-to-video' ? (
                         /* Image-to-Video UI */
-                        <div className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex-1 flex flex-col">
+                        <div className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex-1 flex flex-col min-h-0">
                             <h3 className="text-[0.9rem] font-semibold mb-[15px]">소스 이미지 선택</h3>
 
-                            {/* Scene Images Grid */}
-                            <div className="grid grid-cols-4 gap-3 mb-5">
-                                {currentProject?.assets.filter(a => a.type === 'image').map(asset => (
-                                    <div
-                                        key={asset.id}
-                                        onClick={() => {
-                                            setSingleImage(asset.url);
-                                            setSingleSceneId(asset.sceneNumber || null);
-                                        }}
-                                        draggable
-                                        onDragStart={(e) => {
-                                            e.dataTransfer.setData('imageUrl', asset.url);
-                                            e.dataTransfer.setData('sceneId', asset.sceneNumber?.toString() || '');
-                                        }}
-                                        className={`aspect-video rounded-md overflow-hidden cursor-pointer border-2 transition-all relative group ${singleImage === asset.url
-                                            ? 'border-(--primary-color) ring-2 ring-(--primary-color)/30'
-                                            : 'border-transparent hover:border-(--text-gray)'
-                                            }`}
-                                    >
-                                        <img src={asset.url} alt={asset.title} className="w-full h-full object-cover" />
-                                        {singleImage === asset.url && (
-                                            <div className="absolute top-1 right-1 bg-(--primary-color) rounded-full p-0.5">
-                                                <Check className="w-3 h-3 text-white" />
+                            {/* Scene Images Grid - Fixed Height & Scrollable */}
+                            <div className="h-[320px] overflow-y-auto custom-scrollbar border border-[#2a2a35] rounded-lg p-3 mb-5 bg-[#16161d]">
+                                <div className="grid grid-cols-4 gap-3">
+                                    {currentProject?.assets.filter(a => a.type === 'image').map(asset => (
+                                        <div
+                                            key={asset.id}
+                                            onClick={() => {
+                                                setSingleImage(asset.url);
+                                                setSingleSceneId(asset.sceneNumber || null);
+                                            }}
+                                            draggable
+                                            onDragStart={(e) => {
+                                                e.dataTransfer.setData('imageUrl', asset.url);
+                                                e.dataTransfer.setData('sceneId', asset.sceneNumber?.toString() || '');
+                                            }}
+                                            className={`aspect-video rounded-md overflow-hidden cursor-pointer border-2 transition-all relative group ${singleImage === asset.url
+                                                ? 'border-(--primary-color) ring-2 ring-(--primary-color)/30'
+                                                : 'border-transparent hover:border-(--text-gray)'
+                                                }`}
+                                        >
+                                            <img src={asset.url} alt={asset.title} className="w-full h-full object-cover" />
+                                            {singleImage === asset.url && (
+                                                <div className="absolute top-1 right-1 bg-(--primary-color) rounded-full p-0.5">
+                                                    <Check className="w-3 h-3 text-white" />
+                                                </div>
+                                            )}
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-1 text-[0.65rem] text-white truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {asset.title}
                                             </div>
-                                        )}
-                                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-1 text-[0.65rem] text-white truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {asset.title}
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
 
-                                {/* Upload Button */}
-                                <div className="aspect-video bg-[#15151e] rounded-md border border-dashed border-(--border-color) flex flex-col items-center justify-center cursor-pointer hover:border-(--text-gray) hover:bg-[#1a1a24] transition-colors relative group">
-                                    <Upload className="w-5 h-5 text-(--text-gray) mb-1 group-hover:text-white transition-colors" />
-                                    <span className="text-[0.7rem] text-(--text-gray)">업로드</span>
-                                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImageUpload(e, 'single')} />
+                                    {/* Upload Button */}
+                                    <div className="aspect-video bg-[#15151e] rounded-md border border-dashed border-(--border-color) flex flex-col items-center justify-center cursor-pointer hover:border-(--text-gray) hover:bg-[#1a1a24] transition-colors relative group">
+                                        <Upload className="w-5 h-5 text-(--text-gray) mb-1 group-hover:text-white transition-colors" />
+                                        <span className="text-[0.7rem] text-(--text-gray)">업로드</span>
+                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImageUpload(e, 'single')} />
+                                    </div>
                                 </div>
                             </div>
 
@@ -321,7 +267,7 @@ function VideoPageContent() {
                             <div
                                 onDrop={(e) => handleDrop(e, 'single')}
                                 onDragOver={handleDragOver}
-                                className="flex-1 bg-[#15151e] border-2 border-dashed border-(--border-color) rounded-lg flex flex-col items-center justify-center relative overflow-hidden group hover:border-(--primary-color) transition-colors min-h-[250px]"
+                                className="flex-1 bg-[#15151e] border-2 border-dashed border-(--border-color) rounded-lg flex flex-col items-center justify-center relative overflow-hidden group hover:border-(--primary-color) transition-colors min-h-[200px]"
                             >
                                 {singleImage ? (
                                     <>
@@ -404,20 +350,22 @@ function VideoPageContent() {
                             {/* Scene Images Grid for Selection */}
                             <div className="mt-4">
                                 <p className="text-[0.75rem] text-(--text-gray) mb-2">라이브러리에서 드래그하거나 클릭하여 선택:</p>
-                                <div className="grid grid-cols-6 gap-2">
-                                    {currentProject?.assets.filter(a => a.type === 'image').map(asset => (
-                                        <div
-                                            key={asset.id}
-                                            draggable
-                                            onDragStart={(e) => {
-                                                e.dataTransfer.setData('imageUrl', asset.url);
-                                                e.dataTransfer.setData('sceneId', asset.sceneNumber?.toString() || '');
-                                            }}
-                                            className="aspect-video rounded overflow-hidden cursor-move border border-(--border-color) hover:border-(--primary-color) transition-all"
-                                        >
-                                            <img src={asset.url} alt={asset.title} className="w-full h-full object-cover" />
-                                        </div>
-                                    ))}
+                                <div className="h-[120px] overflow-y-auto custom-scrollbar border border-[#2a2a35] rounded bg-[#16161d] p-2">
+                                    <div className="grid grid-cols-6 gap-2">
+                                        {currentProject?.assets.filter(a => a.type === 'image').map(asset => (
+                                            <div
+                                                key={asset.id}
+                                                draggable
+                                                onDragStart={(e) => {
+                                                    e.dataTransfer.setData('imageUrl', asset.url);
+                                                    e.dataTransfer.setData('sceneId', asset.sceneNumber?.toString() || '');
+                                                }}
+                                                className="aspect-video rounded overflow-hidden cursor-move border border-(--border-color) hover:border-(--primary-color) transition-all"
+                                            >
+                                                <img src={asset.url} alt={asset.title} className="w-full h-full object-cover" />
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -457,25 +405,15 @@ function VideoPageContent() {
                                 className="w-full bg-(--primary-color) text-white py-3.5 rounded-lg font-semibold hover:bg-[#4a4ddb] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20"
                                 disabled={
                                     (settings.videoType === 'image-to-video' && !singleImage) ||
-                                    (settings.videoType === 'start-end-frame' && (!startImage || !endImage)) ||
-                                    !!taskId
+                                    (settings.videoType === 'start-end-frame' && (!startImage || !endImage))
                                 }
                                 onClick={handleGenerateVideo}
                             >
-                                {taskId ? (
-                                    <>
-                                        <RefreshCw className="w-5 h-5 animate-spin" />
-                                        생성 중...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Wand2 className="w-5 h-5" />
-                                        비디오 생성하기
-                                    </>
-                                )}
+                                <Wand2 className="w-5 h-5" />
+                                비디오 생성하기
                             </button>
                             <p className="text-[0.7rem] text-(--text-gray) text-center mt-3">
-                                생성된 비디오는 자동으로 라이브러리에 저장됩니다.
+                                생성 요청 시 라이브러리에 대기열이 추가됩니다.
                             </p>
                         </div>
                     </div>

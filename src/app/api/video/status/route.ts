@@ -15,18 +15,7 @@ export async function GET(request: Request) {
     }
 
     try {
-
-
-
-        if (!userKieKey) {
-            return NextResponse.json(
-                { error: '설정에서 KIE API 키를 먼저 입력해주세요.' },
-                { status: 401 }
-            );
-        }
-
         const url = `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`;
-
 
         const response = await fetch(url, {
             headers: {
@@ -35,37 +24,18 @@ export async function GET(request: Request) {
             }
         });
 
-
-
         if (!response.ok) {
             const errorText = await response.text();
             console.error('KIE Status Error Body:', errorText);
             throw new Error(`KIE Status API Error: ${response.status} - ${errorText}`);
         }
 
-
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('KIE API Error Response:', errorText);
-            throw new Error(`KIE API returned ${response.status}: ${errorText}`);
-        }
-
         const apiResponse = await response.json();
-
 
         // KIE API response structure: { code: 200, msg: "success", data: { state, resultJson, ... } }
         if (apiResponse.code !== 200) {
-            // If code is not 200, it might be a pending state or an error, but check msg
             console.warn('KIE API Code not 200:', apiResponse);
             if (apiResponse.msg === 'recordInfo is null') {
-                // This usually means the task ID is invalid or not found yet. 
-                // We can return 'pending' or 'failed' depending on how long it's been.
-                // For now, let's return pending to avoid breaking the client loop immediately, 
-                // or failed if we want to stop. Given the user's report of infinite loop, 
-                // maybe returning 'failed' with a specific error is better if it persists.
-                // But if it's just slow propagation, pending is safer. 
-                // However, "recordInfo is null" usually means it doesn't exist.
                 return NextResponse.json({ status: 'failed', error: 'Task not found (recordInfo is null)' });
             }
             throw new Error(`KIE API error: ${apiResponse.msg}`);
@@ -77,21 +47,34 @@ export async function GET(request: Request) {
         }
 
         const state = data.state; // "waiting", "success", "fail"
-
-
+        console.log(`[VideoStatus] Task ${taskId} state:`, state); // Debug Log
 
         if (state === 'success') {
-            // Parse resultJson to get video URL
-            const resultJson = JSON.parse(data.resultJson);
-            let videoUrl = resultJson.resultUrls?.[0];
+            console.log(`[VideoStatus] Raw resultJson:`, data.resultJson); // Debug Log
 
+            let resultJson;
+            try {
+                resultJson = JSON.parse(data.resultJson);
+            } catch (e) {
+                console.error('[VideoStatus] Failed to parse resultJson:', data.resultJson);
+                return NextResponse.json({ status: 'failed', error: 'Invalid result JSON from provider' });
+            }
 
+            // Extract video URL - try multiple possible fields
+            let videoUrl = resultJson.resultUrls?.[0] || resultJson.url || resultJson.video_url;
+            console.log(`[VideoStatus] Extracted videoUrl:`, videoUrl); // Debug Log
+
+            if (!videoUrl) {
+                console.error('No video URL found in resultJson:', resultJson);
+                return NextResponse.json({
+                    status: 'failed',
+                    error: 'Video generation completed but no URL was returned'
+                });
+            }
 
             // Upload to Supabase Storage for permanence
             try {
-
                 const permanentUrl = await uploadAssetFromUrl(videoUrl, 'videos');
-
                 videoUrl = permanentUrl;
             } catch (uploadError) {
                 console.error('⚠️ Storage upload failed, using temporary URL:', uploadError);
@@ -99,7 +82,8 @@ export async function GET(request: Request) {
 
             return NextResponse.json({
                 status: 'completed',
-                videoUrl: videoUrl
+                videoUrl: videoUrl,
+                duration: resultJson.duration // Pass duration if available
             });
         } else if (state === 'fail') {
             console.error('Task failed:', data.failMsg);
@@ -114,12 +98,6 @@ export async function GET(request: Request) {
 
     } catch (error) {
         console.error('Video status check error:', error);
-        console.error('Error details:', {
-            message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-            taskId,
-            hasApiKey: !!userKieKey
-        });
         return NextResponse.json({
             error: 'Failed to check status',
             details: error instanceof Error ? error.message : 'Unknown error'

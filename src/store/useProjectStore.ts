@@ -56,6 +56,7 @@ interface ProjectState {
     // Asset Actions
     addAsset: (asset: Omit<Asset, 'id' | 'createdAt'>) => Promise<void>;
     deleteAsset: (id: string) => Promise<void>;
+    updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
 
     // Local State Updates (Optimistic)
     setProject: (project: Project | null) => void;
@@ -445,6 +446,40 @@ export const useProjectStore = create<ProjectState>()(
                     currentProject: state.currentProject ? {
                         ...state.currentProject,
                         assets: state.currentProject.assets.filter(a => a.id !== id)
+                    } : null
+                }));
+            },
+
+            updateAsset: async (id, updates) => {
+                const { currentProject } = get();
+                if (!currentProject) return;
+
+                // 1. Update in DB
+                const { error } = await supabase
+                    .from('assets')
+                    .update({
+                        title: updates.title,
+                        url: updates.url,
+                        thumbnail: updates.thumbnail,
+                        duration: updates.duration,
+                        tag: updates.tag,
+                        storage_path: updates.storagePath,
+                        scene_number: updates.sceneNumber
+                    })
+                    .eq('id', id);
+
+                if (error) {
+                    console.error('Error updating asset:', error);
+                    throw error;
+                }
+
+                // 2. Update local state
+                set(state => ({
+                    currentProject: state.currentProject ? {
+                        ...state.currentProject,
+                        assets: state.currentProject.assets.map(a =>
+                            a.id === id ? { ...a, ...updates } : a
+                        )
                     } : null
                 }));
             },

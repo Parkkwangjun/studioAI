@@ -86,11 +86,11 @@ export default function PromptGenerationPage() {
     };
 
     return (
-        <div className="flex h-full gap-6 p-6">
+        <div className="flex h-full gap-6 p-[30px_40px]">
             {/* Left Panel - Controls */}
             <div className="w-[400px] shrink-0 flex flex-col gap-6 overflow-y-auto pr-2">
                 <div>
-                    <h1 className="text-2xl font-bold text-white mb-2">프롬프트 생성기</h1>
+                    <h1 className="text-[1.2rem] font-semibold text-white mb-2">프롬프트 생성기</h1>
                     <p className="text-sm text-muted">템플릿을 사용하여 완벽한 프롬프트를 만드세요.</p>
                 </div>
 

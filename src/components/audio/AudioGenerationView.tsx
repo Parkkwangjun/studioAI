@@ -91,6 +91,15 @@ const SortableSceneItem = memo(function SortableSceneItem({
         }
     }, [scene.text]);
 
+    const [duration, setDuration] = useState(0);
+
+    const formatDuration = (seconds: number) => {
+        if (!seconds || isNaN(seconds)) return "00:00";
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
     return (
         <div
             ref={setNodeRef}
@@ -144,7 +153,7 @@ const SortableSceneItem = memo(function SortableSceneItem({
                             </span>
                         )}
 
-                        {scene.audioUrl && <span className="text-[0.6rem] text-(--text-gray)">00:00</span>}
+                        {scene.audioUrl && <span className="text-[0.6rem] text-(--text-gray)">{formatDuration(duration)}</span>}
 
                         {/* Hidden Audio Element */}
                         {scene.audioUrl && (
@@ -152,6 +161,7 @@ const SortableSceneItem = memo(function SortableSceneItem({
                                 ref={(el) => setAudioRef(scene.id, el)}
                                 src={scene.audioUrl}
                                 onEnded={() => togglePlay(scene.id, scene.audioUrl)} // Reset play state on end
+                                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
                                 className="hidden"
                             />
                         )}
@@ -200,7 +210,8 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [selectedVoice, setSelectedVoice] = useState<TTSVoice>(getDefaultVoice());
     const [speed, setSpeed] = useState(1.0);
-    const [pitch, setPitch] = useState(0); // Added Pitch
+    const [pitch, setPitch] = useState(0);
+    const [audioFormat, setAudioFormat] = useState('MP3'); // New State
     const [isGeneratingAll, setIsGeneratingAll] = useState(false);
     const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
     const [copiedScene, setCopiedScene] = useState<Scene | null>(null);
@@ -299,6 +310,10 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                body: JSON.stringify({
+                    audioUrls: scenesWithAudio.map(s => s.audioUrl),
+                    projectTitle: useProjectStore.getState().currentProject?.title || 'Project'
+                })
             });
 
             const data = await response.json();
@@ -384,6 +399,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                     voiceId: selectedVoice.id,
                     speed,
                     pitch,
+                    audioEncoding: audioFormat, // Added
                     provider: 'google',
                     googleCredentials
                 })
@@ -392,12 +408,6 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
             const data = await response.json();
             if (data.audioUrl) {
                 updateScene(scene.id, { audioUrl: data.audioUrl });
-
-                // Play immediately only if not silent
-                if (!silent) {
-                    const audio = new Audio(data.audioUrl);
-                    audio.play();
-                }
 
                 // Background save
                 saveAudioToLibrary(data.audioUrl, scene.text);
@@ -414,7 +424,7 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
         } finally {
             setGeneratingId(null);
         }
-    }, [selectedVoice.id, speed, pitch, updateScene, saveAudioToLibrary, googleCredentials, kieKey]);
+    }, [selectedVoice.id, speed, pitch, audioFormat, updateScene, saveAudioToLibrary, googleCredentials, kieKey]);
 
     const handleDownload = useCallback((scene: Scene) => {
         if (!scene.audioUrl) return;
@@ -532,6 +542,22 @@ export function AudioGenerationView({ scenes }: AudioGenerationViewProps) {
                                 className="flex-1 accent-(--primary-color) h-1"
                             />
                         </div>
+                    </div>
+
+                    {/* Format Selector */}
+                    <div className="flex flex-col gap-1.5 col-span-1">
+                        <label className="text-[0.7rem] text-(--text-gray) font-medium">오디오 포맷</label>
+                        <select
+                            value={audioFormat}
+                            onChange={(e) => setAudioFormat(e.target.value)}
+                            className="h-[38px] bg-[#15151e] border border-(--border-color) rounded-lg px-2 text-xs text-white outline-none focus:border-(--primary-color)"
+                        >
+                            <option value="MP3">MP3</option>
+                            <option value="OGG_OPUS">OGG (Opus)</option>
+                            <option value="LINEAR16">WAV (Linear16)</option>
+                            <option value="MULAW">MULAW</option>
+                            <option value="ALAW">ALAW</option>
+                        </select>
                     </div>
 
                     {/* Generate All Button */}

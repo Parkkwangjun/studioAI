@@ -32,7 +32,7 @@ const GeneratedImageCard = React.memo(({ img }: { img: GeneratedImage }) => (
                 Saved to Library
             </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-0 left-0 right-0 p-2 bg-linear-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
             <p className="text-[10px] text-white truncate">{img.prompt}</p>
         </div>
     </div>
@@ -162,11 +162,11 @@ export default function ImageGenerationPage() {
     };
 
     return (
-        <div className="flex h-full gap-6 p-6 py-10">
+        <div className="flex h-full gap-6 p-[30px_40px]">
             {/* Left Panel - Controls */}
             <div className="w-[400px] shrink-0 flex flex-col gap-6 overflow-y-auto px-2">
                 <div>
-                    <h1 className="text-2xl font-bold text-white mb-2">AI 이미지 생성기</h1>
+                    <h1 className="text-[1.2rem] font-semibold text-white mb-2">AI 이미지 생성기</h1>
                     <p className="text-sm text-muted">텍스트를 입력하여 고품질 이미지를 생성하세요.</p>
                 </div>
 

@@ -1,16 +1,23 @@
 'use client';
 
-import { Image as ImageIcon, Wand2, RefreshCw, Zap, X } from 'lucide-react';
+import { Image as ImageIcon, Wand2, RefreshCw, Zap, X, Upload, Trash2, Download } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '@/store/useProjectStore';
 import toast, { Toaster } from 'react-hot-toast';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { MagicPromptButton } from '@/components/common/MagicPromptButton';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 export default function ImagePage() {
     const [fixedPrompt, setFixedPrompt] = useState('high quality, professional photography, 8k resolution, detailed, cinematic lighting, vibrant colors');
-    const [generatingId, setGeneratingId] = useState<number | null>(null);
+    const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
     const [selectedModel, setSelectedModel] = useState<'dev' | 'schnell' | 'nanobanana'>('dev');
+    const [imageSize, setImageSize] = useState<string>('landscape_16_9');
+
+    // Nano Banana Pro specific states
+    const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('1K');
+    const [referenceImages, setReferenceImages] = useState<string[]>([]);
 
     // New state to track editable prompts for each scene
     const [editablePrompts, setEditablePrompts] = useState<{ [key: number]: string }>({});
@@ -26,9 +33,11 @@ export default function ImagePage() {
             setEditablePrompts(prev => {
                 const newPrompts = { ...prev };
                 scenes.forEach(scene => {
-                    newPrompts[scene.id] = fixedPrompt
-                        ? `${fixedPrompt}, ${scene.text}`
-                        : scene.text;
+                    if (!newPrompts[scene.id]) {
+                        newPrompts[scene.id] = fixedPrompt
+                            ? `${fixedPrompt}, ${scene.text}`
+                            : scene.text;
+                    }
                 });
                 return newPrompts;
             });
@@ -40,6 +49,23 @@ export default function ImagePage() {
             ...prev,
             [sceneId]: newPrompt
         }));
+    };
+
+    const handleReferenceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+            const newImages: string[] = [];
+            Array.from(files).forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    newImages.push(URL.createObjectURL(file));
+                }
+            });
+            setReferenceImages(prev => [...prev, ...newImages].slice(0, 8)); // Max 8 images
+        }
+    };
+
+    const removeReferenceImage = (index: number) => {
+        setReferenceImages(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleGenerateImage = async (sceneId: number) => {
@@ -55,7 +81,7 @@ export default function ImagePage() {
             return;
         }
 
-        setGeneratingId(sceneId);
+        setGeneratingIds(prev => new Set(prev).add(sceneId));
         try {
             const response = await fetch('/api/image/generate', {
                 method: 'POST',
@@ -67,9 +93,12 @@ export default function ImagePage() {
                 },
                 body: JSON.stringify({
                     prompt: finalPrompt,
-                    imageSize: "landscape_16_9",
+                    imageSize: imageSize,
                     guidanceScale: 3.5,
-                    model: selectedModel
+                    model: selectedModel,
+                    // Nano Banana Pro params
+                    resolution: selectedModel === 'nanobanana' ? resolution : undefined,
+                    referenceImages: selectedModel === 'nanobanana' ? referenceImages : undefined
                 }),
             });
 
@@ -145,98 +174,225 @@ export default function ImagePage() {
             console.error('Image generation error:', error);
             toast.error(`이미지 생성 실패: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
-            setGeneratingId(null);
+            setGeneratingIds(prev => {
+                const next = new Set(prev);
+                next.delete(sceneId);
+                return next;
+            });
         }
     };
 
     const handleGenerateAll = async () => {
-        let successCount = 0;
-        for (const scene of scenes) {
-            if (!scene.imageUrl && editablePrompts[scene.id]) {
-                await handleGenerateImage(scene.id);
-                successCount++;
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
+        let triggeredCount = 0;
+        const scenesToGenerate = scenes.filter(scene => !scene.imageUrl && editablePrompts[scene.id]);
+
+        if (scenesToGenerate.length === 0) {
+            toast('생성할 이미지가 없습니다.');
+            return;
         }
-        if (successCount > 0) {
-            toast.success(`${successCount}개 이미지 생성 완료`);
+
+        toast.success(`${scenesToGenerate.length}개 이미지 생성 요청을 시작합니다.`);
+
+        for (const scene of scenesToGenerate) {
+            // Fire and forget, but handle errors internally
+            handleGenerateImage(scene.id).catch(console.error);
+            triggeredCount++;
+            // Stagger requests by 1 second to avoid rate limits/overload
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    };
+
+    const handleDownloadAll = async () => {
+        const imagesToDownload = scenes.filter(scene => scene.imageUrl);
+        if (imagesToDownload.length === 0) {
+            toast.error('다운로드할 이미지가 없습니다.');
+            return;
+        }
+
+        const zip = new JSZip();
+        const folder = zip.folder("generated_images");
+
+        const toastId = toast.loading('이미지 압축 중...');
+
+        try {
+            await Promise.all(imagesToDownload.map(async (scene) => {
+                if (!scene.imageUrl) return;
+                try {
+                    const response = await fetch(scene.imageUrl);
+                    const blob = await response.blob();
+                    // Extract extension or default to png
+                    // Handle potential query params in URL
+                    const urlPath = scene.imageUrl.split('?')[0];
+                    const ext = urlPath.split('.').pop() || 'png';
+                    const filename = `scene_${scene.id}.${ext}`;
+                    folder?.file(filename, blob);
+                } catch (e) {
+                    console.error(`Failed to download image for scene ${scene.id}`, e);
+                }
+            }));
+
+            const content = await zip.generateAsync({ type: "blob" });
+            saveAs(content, `${currentProject?.title || 'project'}_images.zip`);
+            toast.success('다운로드 완료!', { id: toastId });
+        } catch (error) {
+            console.error('Download error:', error);
+            toast.error('다운로드 실패', { id: toastId });
         }
     };
 
     return (
-        <div className="flex-1 p-[30px_40px] py-10 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 p-[30px_40px] flex flex-col gap-5 overflow-y-auto custom-scrollbar">
             <Toaster position="top-center" />
 
-            <header className="flex items-center justify-between mb-2.5">
+            <header className="flex items-center justify-between mb-2.5 shrink-0">
                 <div className="flex items-center gap-2.5">
                     <ImageIcon className="w-5 h-5 text-white" />
                     <h2 className="text-[1.2rem] font-semibold">이미지</h2>
                 </div>
-                <button
-                    onClick={handleGenerateAll}
-                    disabled={generatingId !== null}
-                    className="bg-(--primary-color) text-white px-5 py-2.5 rounded-lg font-semibold text-[0.9rem] cursor-pointer hover:bg-[#4a4ddb] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                    전체 이미지 생성
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleDownloadAll}
+                        className="bg-[#3e3e50] text-white px-5 py-2.5 rounded-lg font-semibold text-[0.9rem] cursor-pointer hover:bg-[#4a4a5c] transition-colors flex items-center gap-2"
+                        title="모든 이미지 다운로드"
+                    >
+                        <Download className="w-4 h-4" />
+                        전체 다운로드
+                    </button>
+                    <button
+                        onClick={handleGenerateAll}
+                        disabled={generatingIds.size > 0}
+                        className="bg-(--primary-color) text-white px-5 py-2.5 rounded-lg font-semibold text-[0.9rem] cursor-pointer hover:bg-[#4a4ddb] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        전체 이미지 생성
+                    </button>
+                </div>
             </header>
 
             {/* Settings Section */}
             <section className="bg-(--bg-card) rounded-xl p-5 border border-(--border-color) flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                        <h3 className="text-[1rem] font-semibold">이미지 설정</h3>
-                        <span className="text-[0.85rem] text-(--text-gray)">모델과 프롬프트를 설정하세요.</span>
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                            <h3 className="text-[1rem] font-semibold">이미지 설정</h3>
+                            <span className="text-[0.85rem] text-(--text-gray)">모델과 프롬프트를 설정하세요.</span>
+                        </div>
                     </div>
 
-                    {/* Model Selector */}
-                    <div className="flex bg-[#16161d] p-1 rounded-lg border border-(--border-color)">
-                        <button
-                            onClick={() => setSelectedModel('dev')}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'dev'
-                                ? 'bg-(--primary-color) text-white shadow-sm'
-                                : 'text-(--text-gray) hover:text-white'
-                                }`}
-                        >
-                            <Wand2 className="w-3 h-3" />
-                            Flux Dev (Quality)
-                        </button>
-                        <button
-                            onClick={() => setSelectedModel('schnell')}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'schnell'
-                                ? 'bg-(--primary-color) text-white shadow-sm'
-                                : 'text-(--text-gray) hover:text-white'
-                                }`}
-                        >
-                            <Zap className="w-3 h-3" />
-                            Flux Schnell (Fast)
-                        </button>
-                        <button
-                            onClick={() => setSelectedModel('nanobanana')}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'nanobanana'
-                                ? 'bg-(--primary-color) text-white shadow-sm'
-                                : 'text-(--text-gray) hover:text-white'
-                                }`}
-                        >
-                            <Wand2 className="w-3 h-3" />
-                            Nanobanana (Pro)
-                        </button>
-                    </div>
-                </div>
+                    <div className="flex flex-wrap gap-4 items-start">
+                        {/* Model Selector */}
+                        <div className="flex bg-[#16161d] p-1 rounded-lg border border-(--border-color)">
+                            <button
+                                onClick={() => setSelectedModel('dev')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'dev'
+                                    ? 'bg-(--primary-color) text-white shadow-sm'
+                                    : 'text-(--text-gray) hover:text-white'
+                                    }`}
+                            >
+                                <Wand2 className="w-3 h-3" />
+                                Flux Dev (Quality)
+                            </button>
+                            <button
+                                onClick={() => setSelectedModel('schnell')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'schnell'
+                                    ? 'bg-(--primary-color) text-white shadow-sm'
+                                    : 'text-(--text-gray) hover:text-white'
+                                    }`}
+                            >
+                                <Zap className="w-3 h-3" />
+                                Flux Schnell (Fast)
+                            </button>
+                            <button
+                                onClick={() => setSelectedModel('nanobanana')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${selectedModel === 'nanobanana'
+                                    ? 'bg-(--primary-color) text-white shadow-sm'
+                                    : 'text-(--text-gray) hover:text-white'
+                                    }`}
+                            >
+                                <Wand2 className="w-3 h-3" />
+                                Nano Banana Pro
+                            </button>
+                        </div>
 
-                <div className="flex gap-2.5">
-                    <input
-                        type="text"
-                        className="flex-1 bg-[#16161d] border border-(--border-color) rounded-lg px-4 py-2.5 text-white outline-none focus:border-(--primary-color) text-[0.9rem] transition-colors"
-                        placeholder="고정 프롬프트 입력 (예: high quality, professional photography, 8k resolution)"
-                        value={fixedPrompt}
-                        onChange={(e) => setFixedPrompt(e.target.value)}
-                    />
+                        {/* Aspect Ratio Selector */}
+                        <div className="flex bg-[#16161d] p-1 rounded-lg border border-(--border-color)">
+                            {[
+                                { label: '16:9', value: 'landscape_16_9' },
+                                { label: '9:16', value: 'portrait_16_9' },
+                                { label: '1:1', value: 'square_hd' },
+                                { label: '4:3', value: 'landscape_4_3' }
+                            ].map((ratio) => (
+                                <button
+                                    key={ratio.value}
+                                    onClick={() => setImageSize(ratio.value)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${imageSize === ratio.value
+                                        ? 'bg-(--primary-color) text-white shadow-sm'
+                                        : 'text-(--text-gray) hover:text-white'
+                                        }`}
+                                >
+                                    {ratio.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Resolution Selector (Nano Banana Pro Only) */}
+                        {selectedModel === 'nanobanana' && (
+                            <div className="flex bg-[#16161d] p-1 rounded-lg border border-(--border-color)">
+                                {['1K', '2K', '4K'].map((res) => (
+                                    <button
+                                        key={res}
+                                        onClick={() => setResolution(res as '1K' | '2K' | '4K')}
+                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${resolution === res
+                                            ? 'bg-(--primary-color) text-white shadow-sm'
+                                            : 'text-(--text-gray) hover:text-white'
+                                            }`}
+                                    >
+                                        {res}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Reference Images (Nano Banana Pro Only) */}
+                    {selectedModel === 'nanobanana' && (
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[0.8rem] text-(--text-gray)">참조 이미지 (선택사항, 최대 8장)</label>
+                            <div className="flex flex-wrap gap-2">
+                                {referenceImages.map((img, idx) => (
+                                    <div key={idx} className="relative w-16 h-16 rounded-md overflow-hidden border border-(--border-color) group">
+                                        <img src={img} alt={`Ref ${idx}`} className="w-full h-full object-cover" />
+                                        <button
+                                            onClick={() => removeReferenceImage(idx)}
+                                            className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                                        >
+                                            <Trash2 className="w-4 h-4 text-white" />
+                                        </button>
+                                    </div>
+                                ))}
+                                {referenceImages.length < 8 && (
+                                    <label className="w-16 h-16 rounded-md border border-dashed border-(--border-color) flex items-center justify-center cursor-pointer hover:border-(--primary-color) transition-colors">
+                                        <Upload className="w-4 h-4 text-(--text-gray)" />
+                                        <input type="file" accept="image/*" multiple className="hidden" onChange={handleReferenceImageUpload} />
+                                    </label>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2.5">
+                        <input
+                            type="text"
+                            className="flex-1 bg-[#16161d] border border-(--border-color) rounded-lg px-4 py-2.5 text-white outline-none focus:border-(--primary-color) text-[0.9rem] transition-colors"
+                            placeholder="고정 프롬프트 입력 (예: high quality, professional photography, 8k resolution)"
+                            value={fixedPrompt}
+                            onChange={(e) => setFixedPrompt(e.target.value)}
+                        />
+                    </div>
+                    <p className="text-[0.75rem] text-(--text-gray)">
+                        💡 <strong>{selectedModel === 'dev' ? 'Flux Dev' : selectedModel === 'schnell' ? 'Flux Schnell' : 'Nano Banana Pro'}</strong> 모델이 선택되었습니다.
+                        {selectedModel === 'dev' ? ' 높은 품질의 이미지를 생성하지만 시간이 더 걸릴 수 있습니다.' : selectedModel === 'schnell' ? ' 빠르게 이미지를 생성하며 비용 효율적입니다.' : ' 최신 Nano Banana 모델로 고품질 이미지를 생성합니다. 참조 이미지와 해상도 설정이 가능합니다.'}
+                    </p>
                 </div>
-                <p className="text-[0.75rem] text-(--text-gray)">
-                    💡 <strong>{selectedModel === 'dev' ? 'Flux Dev' : selectedModel === 'schnell' ? 'Flux Schnell' : 'Nanobanana'}</strong> 모델이 선택되었습니다.
-                    {selectedModel === 'dev' ? ' 높은 품질의 이미지를 생성하지만 시간이 더 걸릴 수 있습니다.' : selectedModel === 'schnell' ? ' 빠르게 이미지를 생성하며 비용 효율적입니다.' : ' 최신 Nanobanana 모델로 고품질 이미지를 생성합니다.'}
-                </p>
             </section>
 
             {/* Scene Image Cards Grid */}
@@ -248,10 +404,10 @@ export default function ImagePage() {
                             <span className="font-bold text-[1rem]">#{scene.id}</span>
                             <button
                                 onClick={() => handleGenerateImage(scene.id)}
-                                disabled={generatingId === scene.id || !editablePrompts[scene.id]}
+                                disabled={generatingIds.has(scene.id) || !editablePrompts[scene.id]}
                                 className="bg-[#3e3e50] text-[#c0c0c0] border-none px-3 py-1.5 rounded text-[0.8rem] cursor-pointer hover:bg-[#4a4a5c] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
                             >
-                                {generatingId === scene.id ? (
+                                {generatingIds.has(scene.id) ? (
                                     <>
                                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                         생성 중...

@@ -64,7 +64,7 @@ Return ONLY the optimized English prompt as a single flowing paragraph. Do NOT o
 
 export async function POST(request: Request) {
     try {
-        const { prompt, imageSize, guidanceScale, model } = await request.json();
+        const { prompt, imageSize, guidanceScale, model, resolution, referenceImages } = await request.json();
 
         // Get API keys from headers (BYOK)
         const userFalKey = request.headers.get('x-fal-key');
@@ -100,13 +100,20 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: '설정에서 KIE API 키를 먼저 입력해주세요.' }, { status: 401 });
             }
 
+            // Map aspect ratio
+            let aspectRatio = "16:9";
+            if (imageSize === "portrait_16_9") aspectRatio = "9:16";
+            if (imageSize === "square_hd") aspectRatio = "1:1";
+            if (imageSize === "landscape_4_3") aspectRatio = "4:3";
+
             const payload = {
                 model: "nano-banana-pro",
                 input: {
                     prompt: optimizedEnglishPrompt,
-                    width: imageSize === "square_hd" ? 1024 : (imageSize === "portrait_16_9" ? 576 : 1024),
-                    height: imageSize === "square_hd" ? 1024 : (imageSize === "portrait_16_9" ? 1024 : 576),
-                    num_inference_steps: 30
+                    aspect_ratio: aspectRatio,
+                    resolution: resolution || "1K",
+                    output_format: "png",
+                    image_input: referenceImages || []
                 }
             };
 
